@@ -28,8 +28,8 @@ import org.bukkit.scheduler.BukkitTask;
 // long-stay sound, and grace handling on re-entry / disconnect.
 final class BorderDamageTracker {
 
-    private static final int CHECK_INTERVAL_TICKS = 4;
-    private static final int DAMAGE_EVERY_N_CHECKS = 5; // 4 * 5 = 20 ticks = 1s
+    private static final int CHECK_INTERVAL_TICKS = 1;
+    private static final int DAMAGE_EVERY_N_CHECKS = 20;
     private static final long LONG_ENTER_INTERVAL_MS = 5_000;
 
     // Grace period from first crossing outside - the player has this long to
