@@ -82,7 +82,7 @@ final class BorderDamageTracker {
             border.callbacks.onWarningCleared(uuid);
             Player p = border.plugin.getServer().getPlayer(uuid);
             if (p != null && p.isOnline() && enterLongSoundKey != null) {
-                p.stopSound(enterLongSoundKey, SoundCategory.PLAYERS);
+                p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
             }
         }
         outsidePlayers.clear();
@@ -139,7 +139,7 @@ final class BorderDamageTracker {
                 outsideSinceMs.put(player.getUniqueId(), System.currentTimeMillis());
                 border.callbacks.onWarningShown(player.getUniqueId());
                 if (enterSoundKey != null) {
-                    player.playSound(loc, enterSoundKey, SoundCategory.PLAYERS, 0.5f, 1.0f);
+                    player.playSound(loc, enterSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
                 player.showTitle(warningTitle);
             } else {
@@ -150,7 +150,7 @@ final class BorderDamageTracker {
                         && now - enteredAt >= LONG_ENTER_INTERVAL_MS
                         && (lastPlayed == null || now - lastPlayed >= LONG_ENTER_INTERVAL_MS);
                 if (dueForLong && enterLongSoundKey != null) {
-                    player.playSound(loc, enterLongSoundKey, SoundCategory.PLAYERS, 0.5f, 1.0f);
+                    player.playSound(loc, enterLongSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
                     lastLongPlayedMs.put(player.getUniqueId(), now);
                 }
                 if (shouldDamage) {
@@ -168,7 +168,7 @@ final class BorderDamageTracker {
             outsidePlayers.remove(player.getUniqueId());
             outsideSinceMs.remove(player.getUniqueId());
             if (lastLongPlayedMs.remove(player.getUniqueId()) != null && enterLongSoundKey != null) {
-                player.stopSound(enterLongSoundKey, SoundCategory.PLAYERS);
+                player.stopSound(enterLongSoundKey, SoundCategory.MASTER);
             }
             border.callbacks.onWarningCleared(player.getUniqueId());
             player.clearTitle();
@@ -199,7 +199,7 @@ final class BorderDamageTracker {
                 if (p != null && p.isOnline()) {
                     p.clearTitle();
                     if (lastLongPlayedMs.containsKey(uuid) && enterLongSoundKey != null) {
-                        p.stopSound(enterLongSoundKey, SoundCategory.PLAYERS);
+                        p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
                     }
                 }
                 outsideSinceMs.remove(uuid);
@@ -245,6 +245,6 @@ final class BorderDamageTracker {
     // border damage is a personal warning, not a battlefield cue.
     private void playHurtFeedback(Player player) {
         player.playHurtAnimation(0f);
-        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_HURT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_HURT, SoundCategory.MASTER, 1.0f, 1.0f);
     }
 }
