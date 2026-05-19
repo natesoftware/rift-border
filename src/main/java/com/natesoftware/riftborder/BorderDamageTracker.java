@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -110,7 +111,7 @@ final class BorderDamageTracker {
     }
 
     private void handlePlayer(Player player, boolean shouldDamage) {
-        Location loc = java.util.Objects.requireNonNull(player.getLocation());
+        Location loc = Objects.requireNonNull(player.getLocation());
         boolean outsideRadius = border.isOutside(loc.getX(), loc.getZ());
         boolean aboveCeiling = border.isAboveHeight(loc.getY());
         boolean belowFloor = border.isBelowMinHeight(loc.getY());
