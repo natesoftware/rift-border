@@ -1,0 +1,160 @@
+package com.natesoftware.riftborder;
+
+import org.bukkit.scheduler.BukkitTask;
+
+// Drives the border's shape transition: linearly interpolates centerX/Z and
+// radius from current values to target values over a tick budget. Supports
+// pause / resume / direct position set, and fires the GameBorder shrink-
+// complete callback on natural end. Writes the live shape state back into
+// GameBorder; the renderer is notified per tick to redraw.
+final class BorderShrinkAnimator {
+
+    private final GameBorder border;
+
+    private double startSize;
+    private double endSize;
+    private double startCenterX;
+    private double startCenterZ;
+    private double endCenterX;
+    private double endCenterZ;
+    private double startHeight;
+    private double endHeight;
+    private double startMinHeight;
+    private double endMinHeight;
+    private int totalTicks;
+    private int elapsedTicks;
+    private boolean paused;
+    private boolean started;
+
+    private BukkitTask task;
+
+    BorderShrinkAnimator(GameBorder border) {
+        this.border = border;
+    }
+
+    void startShrinking(double endRadius, int remainingTicks) {
+        moveTo(
+            border.getCenterX(), border.getCenterZ(), endRadius,
+            border.getMaxHeight(), border.getMinHeight(), remainingTicks);
+    }
+
+    void moveTo(
+        double targetX, double targetZ, double endRadius,
+        double targetHeight, double targetMinHeight, int ticks) {
+        stop();
+        startSize = border.getRadius();
+        endSize = endRadius;
+        startCenterX = border.getCenterX();
+        startCenterZ = border.getCenterZ();
+        endCenterX = targetX;
+        endCenterZ = targetZ;
+        startHeight = border.getMaxHeight();
+        endHeight = targetHeight;
+        startMinHeight = border.getMinHeight();
+        endMinHeight = targetMinHeight;
+        totalTicks = Math.max(ticks, 1);
+        elapsedTicks = 0;
+        paused = false;
+        started = true;
+        startTask();
+    }
+
+    void setRemainingTicks(int remainingTicks) {
+        if (task == null) return;
+        elapsedTicks = Math.max(0, totalTicks - remainingTicks);
+        applyProgress();
+    }
+
+    void pause() {
+        paused = true;
+    }
+
+    void resume(int remainingTicks) {
+        if (!started) return;
+        stop();
+        startSize = border.getRadius();
+        startCenterX = border.getCenterX();
+        startCenterZ = border.getCenterZ();
+        startHeight = border.getMaxHeight();
+        startMinHeight = border.getMinHeight();
+        totalTicks = Math.max(remainingTicks, 1);
+        elapsedTicks = 0;
+        paused = false;
+        startTask();
+    }
+
+    void setPosition(double cx, double cz, double newRadius, double newHeight, double newMinHeight) {
+        stop();
+        started = false;
+        border.setShape(cx, cz, newRadius, newHeight, newMinHeight);
+        border.renderer.updateAllEntities();
+    }
+
+    void stop() {
+        if (task != null) {
+            task.cancel();
+            task = null;
+        }
+    }
+
+    void reset() {
+        stop();
+        started = false;
+    }
+
+    private void applyProgress() {
+        double progress = Math.min(1.0, (double) elapsedTicks / totalTicks);
+        double radius = startSize + (endSize - startSize) * progress;
+        double cx = startCenterX + (endCenterX - startCenterX) * progress;
+        double cz = startCenterZ + (endCenterZ - startCenterZ) * progress;
+        border.setShape(cx, cz, radius, computeHeight(progress), computeMinHeight(progress));
+        border.renderer.updateAllEntities();
+    }
+
+    // Lerp the ceiling Y. Either endpoint being NO_HEIGHT_LIMIT (the
+    // "no cap" sentinel) is substituted with the world's max build height
+    // so the visible ceiling descends from above instead of snapping in
+    // from MAX_VALUE math at the very last tick. The actual stored value
+    // snaps to the configured endHeight at progress >= 1 so a phase that
+    // ends with NO_HEIGHT_LIMIT genuinely returns to "no cap" state.
+    private double computeHeight(double progress) {
+        if (progress >= 1.0) return endHeight;
+        double noLimit = BorderPhaseController.Phase.NO_HEIGHT_LIMIT;
+        double effStart = startHeight == noLimit ? border.world.getMaxHeight() : startHeight;
+        double effEnd = endHeight == noLimit ? border.world.getMaxHeight() : endHeight;
+        if (effStart == effEnd) return effEnd;
+        return effStart + (effEnd - effStart) * progress;
+    }
+
+    // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with
+    // the world's min build height so the floor visibly rises from below.
+    private double computeMinHeight(double progress) {
+        if (progress >= 1.0) return endMinHeight;
+        double noFloor = BorderPhaseController.Phase.NO_MIN_HEIGHT;
+        double effStart = startMinHeight == noFloor ? border.world.getMinHeight() : startMinHeight;
+        double effEnd = endMinHeight == noFloor ? border.world.getMinHeight() : endMinHeight;
+        if (effStart == effEnd) return effEnd;
+        return effStart + (effEnd - effStart) * progress;
+    }
+
+    private void startTask() {
+        task = border.plugin
+            .getServer()
+            .getScheduler()
+            .runTaskTimer(
+                border.plugin,
+                () -> {
+                    if (paused) return;
+                    elapsedTicks += BorderRenderer.UPDATE_INTERVAL_TICKS;
+                    applyProgress();
+                    if (elapsedTicks >= totalTicks) {
+                        stop();
+                        if (border.onShrinkComplete != null) {
+                            border.onShrinkComplete.run();
+                        }
+                    }
+                },
+                BorderRenderer.UPDATE_INTERVAL_TICKS,
+                BorderRenderer.UPDATE_INTERVAL_TICKS);
+    }
+}
