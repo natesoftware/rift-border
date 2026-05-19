@@ -159,12 +159,15 @@ public class BorderPhaseController {
      * cancelling any in-flight wait/shrink and resuming from that point. Used
      * when a host command rewinds or fast-forwards the game timer.
      *
+     * <p>Respects the current paused state: if the controller was paused, the
+     * border still snaps to the new position but stays paused. A subsequent
+     * {@link #resume()} picks up at the new position.
+     *
      * @param gameSecondsRemaining the new "seconds remaining" target on the game timer
      */
     public void syncToGameTimer(int gameSecondsRemaining) {
         if (stopped) return;
         cancelWait();
-        paused = false;
 
         // Find which phase and sub-phase this time falls in.
         for (int i = 0; i < phases.size(); i++) {
@@ -342,7 +345,12 @@ public class BorderPhaseController {
 
         int phaseNum = currentPhase + 1;
         border.callbacks.phaseStarted(phaseNum, phases.size(), waitSecondsRemaining);
-        scheduleWaitTicks(subPhaseDurationTicks);
+        if (paused) {
+            // Stay frozen at the new position; resume() will reschedule when called.
+            pausedRemainingTicks = subPhaseDurationTicks;
+        } else {
+            scheduleWaitTicks(subPhaseDurationTicks);
+        }
     }
 
     private void jumpToShrink(int phaseIndex, int shrinkTotal, int shrinkElapsed) {
@@ -394,6 +402,12 @@ public class BorderPhaseController {
         border.onShrinkComplete(this::advancePhase);
         border.moveTo(
             target[0], target[1], phase.endRadius, phase.endHeight, phase.endMinHeight, subPhaseDurationTicks);
+        if (paused) {
+            // moveTo() unfroze the animator. Re-pause so the snap stays put
+            // until the host runs /host timer resume.
+            border.pauseShrinking();
+            pausedRemainingTicks = subPhaseDurationTicks;
+        }
     }
 
     private void scheduleWaitTicks(int ticks) {
