@@ -125,4 +125,5 @@ must register a model under that key that expands into a cylinder shader.**
 Without it, the wall is invisible (or renders as a flat paper sheet, depending
 on your model fallback).
 
-This library does not ship a default pack.
+This library does not ship a default pack. If you'd like one, message
+`Nateiwnl` on Discord.
