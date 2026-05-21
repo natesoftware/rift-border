@@ -9,29 +9,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Convenience orchestrator that drives a {@link GameBorder} through a sequence
- * of {@link Phase Phases}. Each phase waits for {@code waitSeconds}, then
- * shrinks to a smaller radius over {@code shrinkSeconds}. Targets are either
- * random points inside the current zone (default) or fixed at the map centre
- * (see {@link #withFixedCenter}).
- *
- * <p>For exotic behaviour (event-driven shrinks, custom target picking), skip
- * this class and call {@link GameBorder#moveTo} / {@link GameBorder#setPosition}
- * directly.
- *
- * <h2>Example</h2>
- * <pre>{@code
- * List<Phase> phases = List.of(
- *     new Phase(60, 30, 100, 2.0),  // wait 60s, shrink 30s to r=100, 2 dmg/s
- *     new Phase(30, 30, 50,  3.0),
- *     new Phase(15, 15, 0,   5.0));
- *
- * new BorderPhaseController(plugin, border, phases, mapCx, mapCz, initialRadius)
- *     .withFixedCenter(false)
- *     .start(gameDurationSeconds);
- * }</pre>
- */
+// Convenience orchestrator that drives a GameBorder through a sequence of Phase.
 public class BorderPhaseController {
 
     private static final Logger log = LoggerFactory.getLogger(BorderPhaseController.class);
@@ -69,14 +47,6 @@ public class BorderPhaseController {
     private BukkitTask waitTask;
     private Runnable onAllPhasesComplete;
 
-    /**
-     * @param plugin host plugin (used to schedule wait timers)
-     * @param border the border to drive; must already be {@link GameBorder#spawn spawned}
-     * @param phases ordered list of phases to run through
-     * @param mapCenterX X used when {@link #withFixedCenter(boolean)} is enabled
-     * @param mapCenterZ Z used when {@link #withFixedCenter(boolean)} is enabled
-     * @param initialRadius starting radius (must match the value passed to {@code border.spawn})
-     */
     public BorderPhaseController(
         Plugin plugin,
         GameBorder border,
@@ -92,24 +62,13 @@ public class BorderPhaseController {
         this.initialRadius = initialRadius;
     }
 
-    /**
-     * Enables fixed-centre mode: every phase shrinks toward the map centre
-     * passed to the constructor, instead of a random point inside the current
-     * zone.
-     *
-     * @return this builder
-     */
+    // Enables fixed-centre mode: every phase shrinks toward the map centre passed to the constructor, instead of a random point inside the...
     public BorderPhaseController withFixedCenter(boolean fixedCenter) {
         this.fixedCenter = fixedCenter;
         return this;
     }
 
-    /**
-     * Begins phase progression. Pre-computes targets and timing windows from
-     * the supplied game duration, then enters phase 1's WAIT sub-phase.
-     *
-     * @param gameDuration total time the phase sequence is allotted, in seconds
-     */
+    // Begins phase progression.
     public void start(int gameDuration) {
         this.gameDuration = gameDuration;
         stopped = false;
@@ -117,18 +76,18 @@ public class BorderPhaseController {
         advancePhase();
     }
 
-    /** Cancels the controller. The border itself is not removed - call {@link GameBorder#remove()} for that. */
+    // Cancels the controller.
     public void stop() {
         stopped = true;
         cancelWait();
     }
 
-    /** Sets a callback invoked when all phases finish (the border has fully closed). */
+    // Sets a callback invoked when all phases finish (the border has fully closed).
     public void setOnAllPhasesComplete(Runnable callback) {
         this.onAllPhasesComplete = callback;
     }
 
-    /** Pauses the current sub-phase (WAIT or SHRINK). Use {@link #resume()} to continue. */
+    // Pauses the current sub-phase (WAIT or SHRINK).
     public void pause() {
         if (paused) return;
         paused = true;
@@ -141,7 +100,7 @@ public class BorderPhaseController {
         }
     }
 
-    /** Resumes a paused sub-phase from where {@link #pause()} froze it. */
+    // Resumes a paused sub-phase from where pause froze it.
     public void resume() {
         if (!paused) return;
         paused = false;
@@ -154,17 +113,7 @@ public class BorderPhaseController {
         }
     }
 
-    /**
-     * Jumps the border to wherever it would be at the given game-timer value,
-     * cancelling any in-flight wait/shrink and resuming from that point. Used
-     * when a host command rewinds or fast-forwards the game timer.
-     *
-     * <p>Respects the current paused state: if the controller was paused, the
-     * border still snaps to the new position but stays paused. A subsequent
-     * {@link #resume()} picks up at the new position.
-     *
-     * @param gameSecondsRemaining the new "seconds remaining" target on the game timer
-     */
+    // Jumps the border to wherever it would be at the given game-timer value, cancelling any in-flight wait/shrink and resuming from that point.
     public void syncToGameTimer(int gameSecondsRemaining) {
         if (stopped) return;
         cancelWait();
@@ -200,38 +149,31 @@ public class BorderPhaseController {
         }
     }
 
-    /** Alias for {@link #syncToGameTimer(int)}. */
+    // Alias for syncToGameTimer.
     public void setRemainingTime(int totalSeconds) {
         syncToGameTimer(totalSeconds);
     }
 
-    /** Returns {@code true} while the border is mid-shrink (as opposed to waiting). */
+    // Returns true while the border is mid-shrink (as opposed to waiting).
     public boolean isShrinking() {
         return subPhase == SubPhase.SHRINK;
     }
 
-    /** @return 0-indexed current phase, {@code -1} before {@link #start}, or {@code phases.size()} after the last phase finishes. */
     public int getCurrentPhase() {
         return currentPhase;
     }
 
-    /**
-     * @return the {@code [x, z]} centre of the zone the border is currently
-     *         shrinking toward (or about to shrink toward during WAIT), or
-     *         {@code null} if all phases are complete.
-     */
+    // shrinking toward (or about to shrink toward during WAIT), or null if all phases are complete.
     public double[] getTargetCenter() {
         if (currentPhase < 0 || currentPhase >= phases.size()) return null;
         return phaseTargets.get(currentPhase);
     }
 
-    /** @return the end radius of the current phase target, or {@code -1} if all phases are complete. */
     public double getTargetRadius() {
         if (currentPhase < 0 || currentPhase >= phases.size()) return -1;
         return phases.get(currentPhase).endRadius;
     }
 
-    /** @return seconds remaining in the current sub-phase (WAIT or SHRINK), or {@code 0} if none is active. */
     public int getSubPhaseRemaining() {
         if (currentPhase < 0 || currentPhase >= phases.size() || subPhase == null) return 0;
         if (paused) return Math.max(0, pausedRemainingTicks / 20);
@@ -403,8 +345,7 @@ public class BorderPhaseController {
         border.moveTo(
             target[0], target[1], phase.endRadius, phase.endHeight, phase.endMinHeight, subPhaseDurationTicks);
         if (paused) {
-            // moveTo() unfroze the animator. Re-pause so the snap stays put
-            // until the host runs /host timer resume.
+            // moveTo() unfroze the animator.
             border.pauseShrinking();
             pausedRemainingTicks = subPhaseDurationTicks;
         }
@@ -440,37 +381,23 @@ public class BorderPhaseController {
         SHRINK
     }
 
-    /**
-     * Immutable definition of a single border phase.
-     *
-     * <p>{@code endHeight} is the Y of the volumetric ceiling for this phase -
-     * players above it are treated as outside. {@code endMinHeight} is the Y
-     * of the floor. Pass {@link #NO_HEIGHT_LIMIT} / {@link #NO_MIN_HEIGHT} to
-     * leave either side uncapped.
-     *
-     * @param waitSeconds seconds to wait before this phase begins shrinking
-     * @param shrinkSeconds seconds spent shrinking to {@code endRadius}
-     * @param endRadius radius at the end of this phase
-     * @param damage damage per second to players outside during this phase
-     * @param endHeight ceiling Y at end of phase, or {@link #NO_HEIGHT_LIMIT}
-     * @param endMinHeight floor Y at end of phase, or {@link #NO_MIN_HEIGHT}
-     */
+    // Immutable definition of a single border phase. endHeight is the Y of the volumetric ceiling for this phase - players above it are treated...
     public record Phase(
         int waitSeconds, int shrinkSeconds, double endRadius, double damage,
         double endHeight, double endMinHeight) {
 
-        /** Sentinel for "no ceiling" used in {@code endHeight}. */
+        // Sentinel for "no ceiling" used in endHeight.
         public static final double NO_HEIGHT_LIMIT = Double.MAX_VALUE;
 
-        /** Sentinel for "no floor" used in {@code endMinHeight}. */
+        // Sentinel for "no floor" used in endMinHeight.
         public static final double NO_MIN_HEIGHT = -Double.MAX_VALUE;
 
-        /** Convenience constructor with a ceiling but no floor. */
+        // Convenience constructor with a ceiling but no floor.
         public Phase(int waitSeconds, int shrinkSeconds, double endRadius, double damage, double endHeight) {
             this(waitSeconds, shrinkSeconds, endRadius, damage, endHeight, NO_MIN_HEIGHT);
         }
 
-        /** Convenience constructor with neither ceiling nor floor. */
+        // Convenience constructor with neither ceiling nor floor.
         public Phase(int waitSeconds, int shrinkSeconds, double endRadius, double damage) {
             this(waitSeconds, shrinkSeconds, endRadius, damage, NO_HEIGHT_LIMIT, NO_MIN_HEIGHT);
         }

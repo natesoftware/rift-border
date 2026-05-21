@@ -2,11 +2,7 @@ package com.natesoftware.riftborder;
 
 import org.bukkit.scheduler.BukkitTask;
 
-// Drives the border's shape transition: linearly interpolates centerX/Z and
-// radius from current values to target values over a tick budget. Supports
-// pause / resume / direct position set, and fires the GameBorder shrink-
-// complete callback on natural end. Writes the live shape state back into
-// GameBorder; the renderer is notified per tick to redraw.
+// Drives the border's shape transition: linearly interpolates centerX/Z and radius from current values to target values over a tick budget.
 final class BorderShrinkAnimator {
 
     private final GameBorder border;
@@ -111,12 +107,7 @@ final class BorderShrinkAnimator {
         border.renderer.updateAllEntities();
     }
 
-    // Lerp the ceiling Y. Either endpoint being NO_HEIGHT_LIMIT (the
-    // "no cap" sentinel) is substituted with the world's max build height
-    // so the visible ceiling descends from above instead of snapping in
-    // from MAX_VALUE math at the very last tick. The actual stored value
-    // snaps to the configured endHeight at progress >= 1 so a phase that
-    // ends with NO_HEIGHT_LIMIT genuinely returns to "no cap" state.
+    // Lerp the ceiling Y.
     private double computeHeight(double progress) {
         if (progress >= 1.0) return endHeight;
         double noLimit = BorderPhaseController.Phase.NO_HEIGHT_LIMIT;
@@ -126,8 +117,7 @@ final class BorderShrinkAnimator {
         return effStart + (effEnd - effStart) * progress;
     }
 
-    // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with
-    // the world's min build height so the floor visibly rises from below.
+    // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with the world's min build height so the floor visibly rises from below.
     private double computeMinHeight(double progress) {
         if (progress >= 1.0) return endMinHeight;
         double noFloor = BorderPhaseController.Phase.NO_MIN_HEIGHT;

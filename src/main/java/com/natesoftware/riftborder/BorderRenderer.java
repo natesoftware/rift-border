@@ -21,10 +21,7 @@ import org.joml.Vector3f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// Renders the zone border as a grid of invisible ItemDisplay entities. A
-// single closest entity is shown to each player; the others stay hidden. The
-// custom item model expands into a cylinder shader at render time. Owns
-// entity lifecycle, visibility, maintenance respawn, and chunk force-loading.
+// Renders the zone border as a grid of invisible ItemDisplay entities.
 final class BorderRenderer {
 
     private static final Logger log = LoggerFactory.getLogger(BorderRenderer.class);
@@ -42,8 +39,7 @@ final class BorderRenderer {
 
     private final GameBorder border;
 
-    // PDC tag for orphan cleanup. Self-namespaced under the host plugin so
-    // each consumer plugin owns its own tag and we never collide.
+    // PDC tag for orphan cleanup.
     private final NamespacedKey borderTag;
 
     // Grid position (packed long) -> entity.
@@ -53,9 +49,7 @@ final class BorderRenderer {
     private ItemStack borderItem;
     private BukkitTask maintenanceTask;
     private BukkitTask visibilityTask;
-    // Flipped by remove() so async chunk-load callbacks from spawnGridEntities
-    // that resolve after teardown don't spawn orphan entities or leak chunks
-    // into forceLoadedChunks past the release pass.
+    // Flipped by remove() so async chunk-load callbacks from spawnGridEntities that resolve after teardown don't spawn orphan entities or leak...
     private volatile boolean disposed;
 
     BorderRenderer(GameBorder border) {
@@ -96,14 +90,7 @@ final class BorderRenderer {
         }
     }
 
-    // Each grid point requires its chunk loaded so we can spawn an ItemDisplay
-    // in it. Doing this synchronously with setChunkForceLoaded freezes the
-    // main thread when many chunks need fresh generation (e.g. after MCA
-    // Selector trimmed surrounding regions out of the saved template). Instead
-    // we kick off async chunk loads in parallel; each per-chunk callback runs
-    // on the main thread when the chunk reaches FULL status and then spawns
-    // the entity + marks the chunk force-loaded. Entities pop in over ~1-2s
-    // as chunks come ready; the closest-wins picker handles that gracefully.
+    // Each grid point requires its chunk loaded so we can spawn an ItemDisplay in it.
     private void spawnGridEntities() {
         removeAllEntities();
 
@@ -206,8 +193,7 @@ final class BorderRenderer {
                 border.plugin, this::updateVisibility, VISIBILITY_INTERVAL_TICKS, VISIBILITY_INTERVAL_TICKS);
     }
 
-    // Distance check is XZ-only - the shader renders the full cylinder
-    // regardless of the entity's vertical position.
+    // Distance check is XZ-only - the shader renders the full cylinder regardless of the entity's vertical position.
     private void updateVisibility() {
         Collection<ItemDisplay> all = gridEntities.values();
         if (all.isEmpty()) return;

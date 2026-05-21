@@ -7,20 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-/**
- * Pulses a faint white particle ring once per second along the boundary of
- * the {@link BorderPhaseController}'s next phase target, so players can see
- * where the border is heading before it begins to shrink. Visible to everyone
- * in the world.
- *
- * <h2>Example</h2>
- * <pre>{@code
- * NextBorderIndicator indicator = new NextBorderIndicator(plugin, world, phaseController);
- * indicator.start();
- * // ... later ...
- * indicator.stop();
- * }</pre>
- */
+// Pulses a faint white particle ring once per second along the boundary of the BorderPhaseController's next phase target, so players can see...
 public final class NextBorderIndicator {
 
     private static final int PULSE_TICKS = 20; // single-tick flash every second
@@ -40,24 +27,19 @@ public final class NextBorderIndicator {
 
     private BukkitTask task;
 
-    /**
-     * @param plugin host plugin (used to schedule the pulse timer)
-     * @param world the world the ring is rendered in
-     * @param phaseController controller whose target centre/radius the ring tracks
-     */
     public NextBorderIndicator(Plugin plugin, World world, BorderPhaseController phaseController) {
         this.plugin = plugin;
         this.world = world;
         this.phaseController = phaseController;
     }
 
-    /** Begins pulsing the indicator. Safe to call multiple times; cancels and restarts the timer. */
+    // Begins pulsing the indicator.
     public void start() {
         stop();
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, PULSE_TICKS, PULSE_TICKS);
     }
 
-    /** Stops the indicator and clears its cached ring geometry. Safe to call repeatedly. */
+    // Stops the indicator and clears its cached ring geometry.
     public void stop() {
         if (task != null) {
             task.cancel();

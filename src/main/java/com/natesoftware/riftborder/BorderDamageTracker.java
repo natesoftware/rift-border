@@ -22,23 +22,17 @@ import org.bukkit.damage.DamageType;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
-// Periodically scans players in the border's world, classifies each as inside
-// or outside the current shape, and applies HP damage + audio/visual feedback
-// when outside. Maintains per-player state across ticks for the warning title,
-// long-stay sound, and grace handling on re-entry / disconnect.
+// Periodically scans players in the border's world, classifies each as inside or outside the current shape, and applies HP damage +...
 final class BorderDamageTracker {
 
     private static final int CHECK_INTERVAL_TICKS = 1;
     private static final int DAMAGE_EVERY_N_CHECKS = 20;
     private static final long LONG_ENTER_INTERVAL_MS = 5_000;
 
-    // Grace period from first crossing outside - the player has this long to
-    // step back inside before any damage tick lands.
+    // Grace period from first crossing outside - the player has this long to step back inside before any damage tick lands.
     private static final long DAMAGE_GRACE_MS = 1_000;
 
-    // Per-player vertical-boundary indicator: a sparse grid of red dust on
-    // the ceiling or floor plane around the player when within
-    // VERTICAL_INDICATOR_RANGE blocks of it. Visible only to that player.
+    // Per-player vertical-boundary indicator: a sparse grid of red dust on the ceiling or floor plane around the player when within...
     private static final double VERTICAL_INDICATOR_RANGE = 10.0;
     private static final Particle.DustOptions VERTICAL_DUST =
             new Particle.DustOptions(Color.fromRGB(0xFF, 0x40, 0x40), 1.0f);
@@ -118,10 +112,7 @@ final class BorderDamageTracker {
         boolean outside = outsideRadius || aboveCeiling || belowFloor;
         boolean was = outsidePlayers.contains(player.getUniqueId());
 
-        // Subtle visual cue: scatter red dust on the ceiling or floor plane
-        // when the player is inside the radius and within the indicator
-        // range of either boundary. Only that player sees it. Skips entirely
-        // if the phase has no cap on the relevant side.
+        // Subtle visual cue: scatter red dust on the ceiling or floor plane when the player is inside the radius and within the indicator range of...
         if (!outsideRadius) {
             if (border.hasHeightLimit()
                     && Math.abs(border.getMaxHeight() - loc.getY()) <= VERTICAL_INDICATOR_RANGE) {
@@ -175,9 +166,7 @@ final class BorderDamageTracker {
         }
     }
 
-    // 3x3 grid of red dust particles spaced 3 blocks apart on the given
-    // horizontal plane (ceiling Y or floor Y) around the player. Per-viewer
-    // so other players in the same world don't see another player's marker.
+    // 3x3 grid of red dust particles spaced 3 blocks apart on the given horizontal plane (ceiling Y or floor Y) around the player.
     private void spawnVerticalIndicator(Player viewer, Location playerLoc, double planeY) {
         double cx = playerLoc.getX();
         double cz = playerLoc.getZ();
@@ -221,10 +210,7 @@ final class BorderDamageTracker {
             remaining -= absorb;
         }
 
-        // Apply leftover to HP. A fatal tick routes through vanilla damage()
-        // so the death event fires with proper attribution and the vanilla
-        // death animation/sound play - we skip our own feedback in that
-        // case so they don't stack.
+        // Apply leftover to HP.
         if (remaining > 0) {
             double newHealth = player.getHealth() - remaining;
             if (newHealth <= 0) {
@@ -239,10 +225,7 @@ final class BorderDamageTracker {
         playHurtFeedback(player);
     }
 
-    // Paper's directional hurt animation + the vanilla hurt sound. No
-    // velocity/knockback because we never call damage(), so the server-side
-    // hit handler doesn't run. Sound goes only to the player taking damage -
-    // border damage is a personal warning, not a battlefield cue.
+    // Paper's directional hurt animation + the vanilla hurt sound.
     private void playHurtFeedback(Player player) {
         player.playHurtAnimation(0f);
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_HURT, SoundCategory.MASTER, 1.0f, 1.0f);
