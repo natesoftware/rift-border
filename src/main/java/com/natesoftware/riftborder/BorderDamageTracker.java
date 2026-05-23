@@ -113,7 +113,8 @@ final class BorderDamageTracker {
         boolean was = outsidePlayers.contains(player.getUniqueId());
 
         // Subtle visual cue: scatter red dust on the ceiling or floor plane when the player is inside the radius and within the indicator range of...
-        if (!outsideRadius) {
+        // Pulsed at 1 Hz (the damage cadence) to match the next-border ring instead of spawning every tick.
+        if (shouldDamage && !outsideRadius) {
             if (border.hasHeightLimit()
                     && Math.abs(border.getMaxHeight() - loc.getY()) <= VERTICAL_INDICATOR_RANGE) {
                 spawnVerticalIndicator(player, loc, border.getMaxHeight());
