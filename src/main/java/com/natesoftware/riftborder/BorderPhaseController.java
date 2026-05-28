@@ -113,12 +113,18 @@ public class BorderPhaseController {
         }
     }
 
-    // Jumps the border to wherever it would be at the given game-timer value, cancelling any in-flight wait/shrink and resuming from that point.
     public void syncToGameTimer(int gameSecondsRemaining) {
+        syncToGameTimer(gameSecondsRemaining, 20L);
+    }
+
+    // firstDecrementOffset: ticks from now until the sub-phase display should next drop, so the phase HUD timer stays aligned with an external
+    // game timer that may already be partway through its current second.
+    public void syncToGameTimer(int gameSecondsRemaining, long firstDecrementOffset) {
         if (stopped) return;
         cancelWait();
 
-        // Find which phase and sub-phase this time falls in.
+        int offsetCompensation = (int) Math.max(0L, Math.min(19L, 20L - firstDecrementOffset));
+
         for (int i = 0; i < phases.size(); i++) {
             int waitStart = phaseWaitStart.get(i);
             int shrinkStart = phaseShrinkStart.get(i);
@@ -127,13 +133,13 @@ public class BorderPhaseController {
             if (gameSecondsRemaining > waitStart) continue;
             if (gameSecondsRemaining > shrinkStart) {
                 int waitRemaining = gameSecondsRemaining - shrinkStart;
-                jumpToWait(i, waitRemaining);
+                jumpToWait(i, waitRemaining, offsetCompensation);
                 return;
             }
             if (gameSecondsRemaining > end) {
                 int shrinkTotal = phases.get(i).shrinkSeconds;
                 int shrinkElapsed = shrinkStart - gameSecondsRemaining;
-                jumpToShrink(i, shrinkTotal, shrinkElapsed);
+                jumpToShrink(i, shrinkTotal, shrinkElapsed, offsetCompensation);
                 return;
             }
         }
@@ -149,9 +155,12 @@ public class BorderPhaseController {
         }
     }
 
-    // Alias for syncToGameTimer.
     public void setRemainingTime(int totalSeconds) {
-        syncToGameTimer(totalSeconds);
+        syncToGameTimer(totalSeconds, 20L);
+    }
+
+    public void setRemainingTime(int totalSeconds, long firstDecrementOffset) {
+        syncToGameTimer(totalSeconds, firstDecrementOffset);
     }
 
     // Returns true while the border is mid-shrink (as opposed to waiting).
@@ -268,7 +277,7 @@ public class BorderPhaseController {
             target[0], target[1], phase.endRadius, phase.endHeight, phase.endMinHeight, subPhaseDurationTicks);
     }
 
-    private void jumpToWait(int phaseIndex, int waitSecondsRemaining) {
+    private void jumpToWait(int phaseIndex, int waitSecondsRemaining, int offsetCompensation) {
         // Set border to the end state of the previous phase (or initial if phase 0).
         if (phaseIndex > 0) {
             double[] prevTarget = phaseTargets.get(phaseIndex - 1);
@@ -285,7 +294,7 @@ public class BorderPhaseController {
         border.setDamagePerSecond(phases.get(phaseIndex).damage);
         subPhase = SubPhase.WAIT;
         subPhaseStartTick = currentTick();
-        subPhaseDurationTicks = waitSecondsRemaining * 20;
+        subPhaseDurationTicks = waitSecondsRemaining * 20 - offsetCompensation;
 
         int phaseNum = currentPhase + 1;
         border.callbacks.phaseStarted(phaseNum, phases.size(), waitSecondsRemaining);
@@ -297,7 +306,7 @@ public class BorderPhaseController {
         }
     }
 
-    private void jumpToShrink(int phaseIndex, int shrinkTotal, int shrinkElapsed) {
+    private void jumpToShrink(int phaseIndex, int shrinkTotal, int shrinkElapsed, int offsetCompensation) {
         Phase phase = phases.get(phaseIndex);
         double[] target = phaseTargets.get(phaseIndex);
 
@@ -340,7 +349,7 @@ public class BorderPhaseController {
         border.setDamagePerSecond(phases.get(phaseIndex).damage);
         subPhase = SubPhase.SHRINK;
         subPhaseStartTick = currentTick();
-        subPhaseDurationTicks = remainingSeconds * 20;
+        subPhaseDurationTicks = remainingSeconds * 20 - offsetCompensation;
 
         border.callbacks.shrinkStarted();
         border.onShrinkComplete(this::advancePhase);
