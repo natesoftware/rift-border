@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Color;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -105,6 +106,7 @@ final class BorderDamageTracker {
     }
 
     private void handlePlayer(Player player, boolean shouldDamage) {
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
         Location loc = Objects.requireNonNull(player.getLocation());
         boolean outsideRadius = border.isOutside(loc.getX(), loc.getZ());
         boolean aboveCeiling = border.isAboveHeight(loc.getY());
