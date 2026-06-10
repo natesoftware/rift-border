@@ -1,10 +1,12 @@
 package com.natesoftware.riftborder;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -26,9 +28,12 @@ final class BorderRenderer {
 
     private static final Logger log = LoggerFactory.getLogger(BorderRenderer.class);
 
-    static final int UPDATE_INTERVAL_TICKS = 2;
+    static final int UPDATE_INTERVAL_TICKS = 1;
     private static final int MAINTENANCE_INTERVAL_TICKS = 60;
     private static final int VISIBILITY_INTERVAL_TICKS = 10;
+    // Old anchor stays visible this long after a switch so the new one is fully rendered client-side first.
+    // Just one tick: long enough to cover client spawn processing, short enough that the double-blend darkening is a single frame blip.
+    private static final int HANDOFF_OVERLAP_TICKS = 1;
 
     // Grid spacing in blocks (5 chunks).
     private static final int GRID_SPACING = 80;
@@ -45,6 +50,9 @@ final class BorderRenderer {
     // Grid position (packed long) -> entity.
     private final Map<Long, ItemDisplay> gridEntities = new LinkedHashMap<>();
     private final Set<Long> forceLoadedChunks = new HashSet<>();
+
+    // Which anchor each player currently sees.
+    private final Map<UUID, ItemDisplay> shownByPlayer = new HashMap<>();
 
     private ItemStack borderItem;
     private BukkitTask maintenanceTask;
@@ -81,6 +89,7 @@ final class BorderRenderer {
         }
         removeAllEntities();
         releaseForceLoadedChunks();
+        shownByPlayer.clear();
     }
 
     void updateAllEntities() {
@@ -198,6 +207,11 @@ final class BorderRenderer {
         Collection<ItemDisplay> all = gridEntities.values();
         if (all.isEmpty()) return;
 
+        shownByPlayer.keySet().removeIf(uuid -> {
+            Player p = border.plugin.getServer().getPlayer(uuid);
+            return p == null || !p.isOnline() || !p.getWorld().equals(border.world);
+        });
+
         for (Player player : border.world.getPlayers()) {
             Location pLoc = java.util.Objects.requireNonNull(player.getLocation());
             double px = pLoc.getX();
@@ -217,16 +231,36 @@ final class BorderRenderer {
                     bestEntity = entity;
                 }
             }
+            if (bestEntity == null) continue;
 
-            for (ItemDisplay entity : all) {
-                if (entity.isDead()) continue;
-                if (entity == bestEntity) {
-                    player.showEntity(border.plugin, entity);
-                } else {
-                    player.hideEntity(border.plugin, entity);
-                }
+            ItemDisplay current = shownByPlayer.get(player.getUniqueId());
+            if (current != null && current.isDead()) current = null;
+
+            if (current == bestEntity) continue;
+            if (current == null) {
+                player.showEntity(border.plugin, bestEntity);
+            } else {
+                handoff(player, current, bestEntity);
             }
+            shownByPlayer.put(player.getUniqueId(), bestEntity);
         }
+    }
+
+    // Show the new anchor first, keep the old one rendering underneath, then drop it once the new one is on screen.
+    private void handoff(Player player, ItemDisplay oldEntity, ItemDisplay newEntity) {
+        player.showEntity(border.plugin, newEntity);
+        border.plugin
+            .getServer()
+            .getScheduler()
+            .runTaskLater(
+                border.plugin,
+                () -> {
+                    if (disposed) return;
+                    if (player.isOnline() && !oldEntity.isDead()) {
+                        player.hideEntity(border.plugin, oldEntity);
+                    }
+                },
+                HANDOFF_OVERLAP_TICKS);
     }
 
     private void startMaintenanceTask() {
