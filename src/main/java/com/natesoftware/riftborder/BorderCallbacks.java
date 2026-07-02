@@ -3,6 +3,7 @@ package com.natesoftware.riftborder;
 import java.util.UUID;
 
 import net.kyori.adventure.text.Component;
+import org.bukkit.Color;
 import org.bukkit.NamespacedKey;
 
 // Branding and presentation hooks that a host plugin supplies when constructing a GameBorder.
@@ -40,5 +41,10 @@ public interface BorderCallbacks {
     // Sound key played periodically (every ~5s) while a player remains outside for a sustained interval.
     default String enterLongSoundKey() {
         return "minecraft:entity.wither.spawn";
+    }
+
+    // Dust color of the particle wall shown to players in PARTICLE render mode.
+    default Color particleColor() {
+        return Color.WHITE;
     }
 }

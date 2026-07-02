@@ -213,6 +213,12 @@ final class BorderRenderer {
         });
 
         for (Player player : border.world.getPlayers()) {
+            // Particle-mode players get the particle wall instead - hide any anchor they were shown.
+            if (border.renderModeFor(player.getUniqueId()) == BorderRenderMode.PARTICLE) {
+                ItemDisplay shown = shownByPlayer.remove(player.getUniqueId());
+                if (shown != null && !shown.isDead()) player.hideEntity(border.plugin, shown);
+                continue;
+            }
             Location pLoc = java.util.Objects.requireNonNull(player.getLocation());
             double px = pLoc.getX();
             double pz = pLoc.getZ();

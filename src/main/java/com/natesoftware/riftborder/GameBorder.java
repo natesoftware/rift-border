@@ -2,6 +2,7 @@ package com.natesoftware.riftborder;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.bukkit.World;
@@ -31,8 +32,10 @@ public class GameBorder {
     Supplier<Set<UUID>> participantSupplier;
     Runnable onShrinkComplete;
     BorderCallbacks callbacks;
+    Function<UUID, BorderRenderMode> renderModeResolver = uuid -> BorderRenderMode.SHADER;
 
     final BorderRenderer renderer;
+    final ParticleBorderRenderer particleRenderer;
     final BorderShrinkAnimator animator;
     final BorderDamageTracker damageTracker;
 
@@ -48,6 +51,7 @@ public class GameBorder {
         this.initialCenterX = centerX;
         this.initialCenterZ = centerZ;
         this.renderer = new BorderRenderer(this);
+        this.particleRenderer = new ParticleBorderRenderer(this);
         this.animator = new BorderShrinkAnimator(this);
         this.damageTracker = new BorderDamageTracker(this);
     }
@@ -68,6 +72,18 @@ public class GameBorder {
     public GameBorder withCallbacks(BorderCallbacks callbacks) {
         this.callbacks = callbacks;
         return this;
+    }
+
+    // Per-player render mode lookup, re-evaluated on every visibility and particle pass. Defaults everyone to SHADER.
+    public GameBorder withRenderModeResolver(Function<UUID, BorderRenderMode> resolver) {
+        this.renderModeResolver = resolver;
+        return this;
+    }
+
+    // Render mode for a player, treating a null resolver result as SHADER.
+    BorderRenderMode renderModeFor(UUID uuid) {
+        BorderRenderMode mode = renderModeResolver.apply(uuid);
+        return mode != null ? mode : BorderRenderMode.SHADER;
     }
 
     // Sets the damage applied per second to a player who has been outside the border longer than the grace period. 0 disables damage entirely.
@@ -140,6 +156,7 @@ public class GameBorder {
         this.active = true;
 
         renderer.spawn();
+        particleRenderer.start();
         if (damagePerSecond > 0) damageTracker.start();
     }
 
@@ -148,6 +165,7 @@ public class GameBorder {
         animator.reset();
         active = false;
         renderer.remove();
+        particleRenderer.stop();
         damageTracker.stop();
     }
 
