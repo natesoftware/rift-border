@@ -37,8 +37,8 @@ final class BorderRenderer {
 
     // Grid spacing in blocks (5 chunks).
     private static final int GRID_SPACING = 80;
-    // Half-extent of the grid area (1000x1000 play area).
-    private static final int GRID_EXTENT = 500;
+    // Hard ceiling on the grid half-extent (1000x1000 play area).
+    private static final int MAX_GRID_EXTENT = 500;
     // Y level to spawn grid entities - above terrain to avoid block occlusion.
     private static final int GRID_SPAWN_Y = 319;
 
@@ -99,14 +99,20 @@ final class BorderRenderer {
         }
     }
 
+    // Sized to the initial radius - every later phase stays inside the initial zone, so small arenas skip the full-map grid.
+    private int gridExtent() {
+        return (int) Math.min(MAX_GRID_EXTENT, Math.ceil(border.getRadius()) + GRID_SPACING);
+    }
+
     // Each grid point requires its chunk loaded so we can spawn an ItemDisplay in it.
     private void spawnGridEntities() {
         removeAllEntities();
 
-        int startX = alignToGrid((int) Math.floor(border.initialCenterX) - GRID_EXTENT);
-        int startZ = alignToGrid((int) Math.floor(border.initialCenterZ) - GRID_EXTENT);
-        int endX = (int) Math.floor(border.initialCenterX) + GRID_EXTENT;
-        int endZ = (int) Math.floor(border.initialCenterZ) + GRID_EXTENT;
+        int extent = gridExtent();
+        int startX = alignToGrid((int) Math.floor(border.initialCenterX) - extent);
+        int startZ = alignToGrid((int) Math.floor(border.initialCenterZ) - extent);
+        int endX = (int) Math.floor(border.initialCenterX) + extent;
+        int endZ = (int) Math.floor(border.initialCenterZ) + extent;
 
         for (int gx = startX; gx <= endX; gx += GRID_SPACING) {
             for (int gz = startZ; gz <= endZ; gz += GRID_SPACING) {
