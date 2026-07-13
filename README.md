@@ -1,6 +1,6 @@
 # rift-border
 
-A volumetric circular border for Paper 1.21.8 servers. Renders a shrinkable
+A volumetric circular border for Paper 1.21.11 servers. Renders a shrinkable
 cylinder via grid-mounted `ItemDisplay` entities and a custom item-model
 shader, animates shape transitions, and damages players who stray outside the
 radius or beyond an optional ceiling / floor.
@@ -16,7 +16,7 @@ radius or beyond an optional ceiling / floor.
 
 ## Requirements
 
-- Paper (or compatible fork) 1.21.8+
+- Paper (or compatible fork) 1.21.11+
 - Java 21
 - A resource pack registering the wall item-model (see [Resource pack contract](#resource-pack-contract))
 
