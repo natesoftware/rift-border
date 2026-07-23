@@ -94,8 +94,9 @@ final class BorderRenderer {
 
     void updateAllEntities() {
         float rf = (float) border.getRadius();
+        float pf = (float) border.getPatternRadius();
         for (ItemDisplay entity : gridEntities.values()) {
-            updateEntityTransform(entity, rf);
+            updateEntityTransform(entity, rf, pf);
         }
     }
 
@@ -139,6 +140,7 @@ final class BorderRenderer {
         float ty = (float) (border.centerY - y);
         float tz = (float) (border.getCenterZ() - z);
         float rf = (float) border.getRadius();
+        float pf = (float) border.getPatternRadius();
 
         ItemDisplay entity = border.world.spawn(loc, ItemDisplay.class, e -> {
             e.setPersistent(false);
@@ -148,8 +150,9 @@ final class BorderRenderer {
             e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
             e.setViewRange(128f);
             e.setItemStack(borderItem.clone());
+            // X scale carries the live radius, Z the pattern-anchor radius - the shader reads both from the quad edges
             e.setTransformation(new Transformation(
-                new Vector3f(tx, ty, tz), new Quaternionf(), new Vector3f(rf, rf, rf), new Quaternionf()));
+                new Vector3f(tx, ty, tz), new Quaternionf(), new Vector3f(rf, rf, pf), new Quaternionf()));
             e.setInterpolationDuration(0);
             e.setInterpolationDelay(-1);
         });
@@ -169,7 +172,7 @@ final class BorderRenderer {
         return entity;
     }
 
-    private void updateEntityTransform(ItemDisplay entity, float rf) {
+    private void updateEntityTransform(ItemDisplay entity, float rf, float pf) {
         if (entity == null || entity.isDead()) return;
         Location eLoc = entity.getLocation();
         float tx = (float) (border.getCenterX() - eLoc.getX());
@@ -177,7 +180,7 @@ final class BorderRenderer {
         float tz = (float) (border.getCenterZ() - eLoc.getZ());
         entity.setInterpolationDelay(0);
         entity.setTransformation(new Transformation(
-            new Vector3f(tx, ty, tz), new Quaternionf(), new Vector3f(rf, rf, rf), new Quaternionf()));
+            new Vector3f(tx, ty, tz), new Quaternionf(), new Vector3f(rf, rf, pf), new Quaternionf()));
     }
 
     private void removeAllEntities() {

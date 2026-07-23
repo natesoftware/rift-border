@@ -110,6 +110,13 @@ public class GameBorder {
         return radius;
     }
 
+    // Radius the wall pattern anchors to: the transition target while shrinking, else the live radius.
+    // A fixed anchor keeps the shader pattern from sliding mid-shrink; density converges as the wall lands.
+    public double getPatternRadius() {
+        double end = animator.activeEndRadius();
+        return !Double.isNaN(end) && end < radius ? end : radius;
+    }
+
     public double getDamagePerSecond() {
         return damagePerSecond;
     }

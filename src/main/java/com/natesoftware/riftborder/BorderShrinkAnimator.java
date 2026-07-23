@@ -98,6 +98,11 @@ final class BorderShrinkAnimator {
         started = false;
     }
 
+    // End radius of the in-flight transition, or NaN when idle.
+    double activeEndRadius() {
+        return task != null ? endSize : Double.NaN;
+    }
+
     private void applyProgress() {
         double progress = Math.min(1.0, (double) elapsedTicks / totalTicks);
         double radius = startSize + (endSize - startSize) * progress;
