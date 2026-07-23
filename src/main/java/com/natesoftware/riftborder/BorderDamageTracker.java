@@ -28,6 +28,8 @@ final class BorderDamageTracker {
 
     private static final int CHECK_INTERVAL_TICKS = 1;
     private static final int DAMAGE_EVERY_N_CHECKS = 20;
+    // The vertical indicator pulses on its own slower cadence, matching the other particle cues.
+    private static final int INDICATOR_EVERY_N_CHECKS = 40;
     private static final long LONG_ENTER_INTERVAL_MS = 5_000;
 
     // Grace period from first crossing outside - the player has this long to step back inside before any damage tick lands.
@@ -35,8 +37,9 @@ final class BorderDamageTracker {
 
     // Per-player vertical-boundary indicator: a sparse grid of red dust on the ceiling or floor plane around the player when within...
     private static final double VERTICAL_INDICATOR_RANGE = 10.0;
+    // Sized to match the wall renderer's smallest dust.
     private static final Particle.DustOptions VERTICAL_DUST =
-            new Particle.DustOptions(Color.fromRGB(0xFF, 0x40, 0x40), 1.0f);
+            new Particle.DustOptions(Color.fromRGB(0xFF, 0x40, 0x40), 2.0f);
 
     private static final Title.Times WARNING_TIMES =
             Title.Times.times(Duration.ZERO, Duration.ofDays(1), Duration.ZERO);
@@ -52,6 +55,7 @@ final class BorderDamageTracker {
     private String enterLongSoundKey;
     private BukkitTask task;
     private int checkCounter;
+    private int indicatorCounter;
 
     BorderDamageTracker(GameBorder border) {
         this.border = border;
@@ -59,6 +63,7 @@ final class BorderDamageTracker {
 
     void start() {
         checkCounter = 0;
+        indicatorCounter = 0;
         warningTitle = Title.title(border.callbacks.warningTitle(), Component.empty(), WARNING_TIMES);
         enterSoundKey = border.callbacks.enterSoundKey();
         enterLongSoundKey = border.callbacks.enterLongSoundKey();
@@ -89,6 +94,9 @@ final class BorderDamageTracker {
         checkCounter++;
         boolean shouldDamage = checkCounter >= DAMAGE_EVERY_N_CHECKS;
         if (shouldDamage) checkCounter = 0;
+        indicatorCounter++;
+        boolean showIndicator = indicatorCounter >= INDICATOR_EVERY_N_CHECKS;
+        if (showIndicator) indicatorCounter = 0;
 
         Supplier<Set<UUID>> supplier = border.participantSupplier;
         Set<UUID> participantUuids = supplier != null ? supplier.get() : null;
@@ -100,23 +108,19 @@ final class BorderDamageTracker {
                     .toList();
         }
         for (Player player : candidates) {
-            handlePlayer(player, shouldDamage);
+            handlePlayer(player, shouldDamage, showIndicator);
         }
         purgeStalePlayers(participantUuids);
     }
 
-    private void handlePlayer(Player player, boolean shouldDamage) {
-        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
+    private void handlePlayer(Player player, boolean shouldDamage, boolean showIndicator) {
         Location loc = Objects.requireNonNull(player.getLocation());
         boolean outsideRadius = border.isOutside(loc.getX(), loc.getZ());
-        boolean aboveCeiling = border.isAboveHeight(loc.getY());
-        boolean belowFloor = border.isBelowMinHeight(loc.getY());
-        boolean outside = outsideRadius || aboveCeiling || belowFloor;
-        boolean was = outsidePlayers.contains(player.getUniqueId());
 
         // Subtle visual cue: scatter red dust on the ceiling or floor plane when the player is inside the radius and within the indicator range of...
-        // Pulsed at 1 Hz (the damage cadence) to match the next-border ring instead of spawning every tick.
-        if (shouldDamage && !outsideRadius) {
+        // Pulsed on the shared particle cadence instead of spawning every tick.
+        // Shown in every gamemode - only warnings and damage below are survival-only.
+        if (showIndicator && !outsideRadius) {
             if (border.hasHeightLimit()
                     && Math.abs(border.getMaxHeight() - loc.getY()) <= VERTICAL_INDICATOR_RANGE) {
                 spawnVerticalIndicator(player, loc, border.getMaxHeight());
@@ -126,6 +130,12 @@ final class BorderDamageTracker {
                 spawnVerticalIndicator(player, loc, border.getMinHeight());
             }
         }
+
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
+        boolean aboveCeiling = border.isAboveHeight(loc.getY());
+        boolean belowFloor = border.isBelowMinHeight(loc.getY());
+        boolean outside = outsideRadius || aboveCeiling || belowFloor;
+        boolean was = outsidePlayers.contains(player.getUniqueId());
 
         if (outside) {
             if (!was) {

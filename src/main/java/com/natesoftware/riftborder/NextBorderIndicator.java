@@ -10,7 +10,7 @@ import org.bukkit.scheduler.BukkitTask;
 // Pulses a faint white particle ring once per second along the boundary of the BorderPhaseController's next phase target, so players can see...
 public final class NextBorderIndicator {
 
-    private static final int PULSE_TICKS = 20; // single-tick flash every second
+    private static final int PULSE_TICKS = 40; // single-tick flash every two seconds
     private static final double PARTICLE_SPACING = 1.0;
     private static final double Y_OFFSET = 0.0;
     private static final double MAX_VIEW_DISTANCE_SQ = 80 * 80;
