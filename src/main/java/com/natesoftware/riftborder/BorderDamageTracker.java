@@ -64,7 +64,8 @@ final class BorderDamageTracker {
     void start() {
         checkCounter = 0;
         indicatorCounter = 0;
-        warningTitle = Title.title(border.callbacks.warningTitle(), Component.empty(), WARNING_TIMES);
+        Component warning = border.callbacks.warningTitle();
+        warningTitle = warning != null ? Title.title(warning, Component.empty(), WARNING_TIMES) : null;
         enterSoundKey = border.callbacks.enterSoundKey();
         enterLongSoundKey = border.callbacks.enterLongSoundKey();
         task = border.plugin
@@ -145,7 +146,7 @@ final class BorderDamageTracker {
                 if (enterSoundKey != null) {
                     player.playSound(loc, enterSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
-                player.showTitle(warningTitle);
+                if (warningTitle != null) player.showTitle(warningTitle);
             } else {
                 long now = System.currentTimeMillis();
                 Long enteredAt = outsideSinceMs.get(player.getUniqueId());
@@ -157,7 +158,7 @@ final class BorderDamageTracker {
                     player.playSound(loc, enterLongSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
                     lastLongPlayedMs.put(player.getUniqueId(), now);
                 }
-                if (shouldDamage) {
+                if (shouldDamage && warningTitle != null) {
                     player.showTitle(warningTitle);
                 }
             }
@@ -175,7 +176,7 @@ final class BorderDamageTracker {
                 player.stopSound(enterLongSoundKey, SoundCategory.MASTER);
             }
             border.callbacks.onWarningCleared(player.getUniqueId());
-            player.clearTitle();
+            if (warningTitle != null) player.clearTitle();
         }
     }
 

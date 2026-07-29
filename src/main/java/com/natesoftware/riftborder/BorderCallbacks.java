@@ -9,8 +9,10 @@ import org.bukkit.NamespacedKey;
 // Branding and presentation hooks that a host plugin supplies when constructing a GameBorder.
 public interface BorderCallbacks {
 
-    // Title shown to a player while they are outside the border.
-    Component warningTitle();
+    // Title shown to a player while they are outside the border - null skips the persistent title entirely.
+    default Component warningTitle() {
+        return null;
+    }
 
     // Resource-pack item-model key applied to the wall display entities.
     NamespacedKey wallItemModel();
