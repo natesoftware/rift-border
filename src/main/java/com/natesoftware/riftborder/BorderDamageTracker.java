@@ -109,8 +109,11 @@ final class BorderDamageTracker {
                     .toList();
         }
         for (Player player : candidates) {
+            // a lethal tick can end the round and stop this tracker from inside the loop - once stopped it touches nobody
+            if (task == null) return;
             handlePlayer(player, shouldDamage, showIndicator);
         }
+        if (task == null) return;
         purgeStalePlayers(participantUuids);
     }
 
@@ -132,11 +135,15 @@ final class BorderDamageTracker {
             }
         }
 
-        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
+        boolean was = outsidePlayers.contains(player.getUniqueId());
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+            // a marked player moved to a non-play mode is outside nothing - drop the warning rather than freeze it
+            if (was) markInside(player);
+            return;
+        }
         boolean aboveCeiling = border.isAboveHeight(loc.getY());
         boolean belowFloor = border.isBelowMinHeight(loc.getY());
         boolean outside = outsideRadius || aboveCeiling || belowFloor;
-        boolean was = outsidePlayers.contains(player.getUniqueId());
 
         if (outside) {
             if (!was) {
@@ -170,14 +177,18 @@ final class BorderDamageTracker {
                 }
             }
         } else if (was) {
-            outsidePlayers.remove(player.getUniqueId());
-            outsideSinceMs.remove(player.getUniqueId());
-            if (lastLongPlayedMs.remove(player.getUniqueId()) != null && enterLongSoundKey != null) {
-                player.stopSound(enterLongSoundKey, SoundCategory.MASTER);
-            }
-            border.callbacks.onWarningCleared(player.getUniqueId());
-            if (warningTitle != null) player.clearTitle();
+            markInside(player);
         }
+    }
+
+    private void markInside(Player player) {
+        outsidePlayers.remove(player.getUniqueId());
+        outsideSinceMs.remove(player.getUniqueId());
+        if (lastLongPlayedMs.remove(player.getUniqueId()) != null && enterLongSoundKey != null) {
+            player.stopSound(enterLongSoundKey, SoundCategory.MASTER);
+        }
+        border.callbacks.onWarningCleared(player.getUniqueId());
+        if (warningTitle != null) player.clearTitle();
     }
 
     // 3x3 grid of red dust particles spaced 3 blocks apart on the given horizontal plane (ceiling Y or floor Y) around the player.
