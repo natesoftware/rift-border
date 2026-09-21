@@ -66,6 +66,8 @@ final class BorderRenderer {
     }
 
     void spawn() {
+        // Cleared so a border re-spawned after remove() isn't silently blanked by the async chunk callbacks bailing on a stale flag.
+        disposed = false;
         borderItem = new ItemStack(Material.PAPER);
         borderItem.editMeta(m -> m.setItemModel(border.callbacks.wallItemModel()));
 

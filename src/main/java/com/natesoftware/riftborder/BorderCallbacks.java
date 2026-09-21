@@ -14,14 +14,16 @@ public interface BorderCallbacks {
         return null;
     }
 
-    // Resource-pack item-model key applied to the wall display entities.
-    NamespacedKey wallItemModel();
+    // Item-model key for the wall display entities. Null means no pack is installed - the border then renders as particles for everyone.
+    default NamespacedKey wallItemModel() {
+        return null;
+    }
 
     // Called when a new phase begins.
-    void phaseStarted(int phase, int total, int waitSeconds);
+    default void phaseStarted(int phase, int total, int waitSeconds) {}
 
     // Called when the current phase's wait is over and the border begins shrinking.
-    void shrinkStarted();
+    default void shrinkStarted() {}
 
     // Called the first tick a player is found outside the border.
     default void onWarningShown(UUID player) {}

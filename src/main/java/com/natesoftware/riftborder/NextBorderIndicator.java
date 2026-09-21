@@ -73,7 +73,7 @@ public final class NextBorderIndicator {
     }
 
     private void rebuildRing() {
-        double[] target = phaseController.getTargetCenter();
+        BorderPoint target = phaseController.getTargetCenter();
         double radius = phaseController.getTargetRadius();
         if (target == null || radius <= 0) {
             ringX = null;
@@ -81,8 +81,8 @@ public final class NextBorderIndicator {
             return;
         }
 
-        double cx = target[0];
-        double cz = target[1];
+        double cx = target.x();
+        double cz = target.z();
         int points = Math.max(16, (int) (2 * Math.PI * radius / PARTICLE_SPACING));
 
         ringX = new double[points];

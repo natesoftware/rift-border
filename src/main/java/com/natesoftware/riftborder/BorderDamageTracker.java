@@ -82,9 +82,10 @@ final class BorderDamageTracker {
         for (UUID uuid : outsidePlayers) {
             border.callbacks.onWarningCleared(uuid);
             Player p = border.plugin.getServer().getPlayer(uuid);
-            if (p != null && p.isOnline() && enterLongSoundKey != null) {
-                p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
-            }
+            if (p == null || !p.isOnline()) continue;
+            // the warning title has a day-long stay, so a player still outside at teardown keeps it until something clears it
+            if (warningTitle != null) p.clearTitle();
+            if (enterLongSoundKey != null) p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
         }
         outsidePlayers.clear();
         outsideSinceMs.clear();
@@ -226,6 +227,8 @@ final class BorderDamageTracker {
 
     private void applyBorderDamage(Player player) {
         double remaining = border.getDamagePerSecond();
+        // A 0-damage phase still warns and still tracks - it just must not deal damage or play the hurt flash.
+        if (remaining <= 0) return;
 
         // Hit absorption first, mirroring vanilla's damage order.
         double absorption = player.getAbsorptionAmount();

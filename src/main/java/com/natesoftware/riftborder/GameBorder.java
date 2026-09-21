@@ -7,9 +7,19 @@ import java.util.function.Supplier;
 
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // A circular, volumetric border for a Minecraft world.
 public class GameBorder {
+
+    private static final Logger log = LoggerFactory.getLogger(GameBorder.class);
+
+    // Sentinel for "no ceiling" in maxHeight.
+    public static final double NO_HEIGHT_LIMIT = Double.MAX_VALUE;
+
+    // Sentinel for "no floor" in minHeight.
+    public static final double NO_MIN_HEIGHT = -Double.MAX_VALUE;
 
     final Plugin plugin;
     final World world;
@@ -24,14 +34,16 @@ public class GameBorder {
     private double damagePerSecond = 2.0;
 
     // Y of the volumetric ceiling.
-    private double maxHeight = BorderPhaseController.Phase.NO_HEIGHT_LIMIT;
+    private double maxHeight = NO_HEIGHT_LIMIT;
 
     // Y of the volumetric floor.
-    private double minHeight = BorderPhaseController.Phase.NO_MIN_HEIGHT;
+    private double minHeight = NO_MIN_HEIGHT;
 
     Supplier<Set<UUID>> participantSupplier;
     Runnable onShrinkComplete;
     BorderCallbacks callbacks;
+    // Registered by BorderPhaseController so remove() stops phase progression - teardown order stops being load-bearing on the caller.
+    BorderPhaseController controller;
     Function<UUID, BorderRenderMode> renderModeResolver = uuid -> BorderRenderMode.SHADER;
 
     final BorderRenderer renderer;
@@ -40,6 +52,9 @@ public class GameBorder {
     final BorderDamageTracker damageTracker;
 
     private boolean active;
+
+    // Resolved at spawn from callbacks.wallItemModel(). False means there is no pack, so the shader wall has nothing to draw.
+    private boolean packConfigured;
 
     // Creates a new border centred at (centerX, centerY, centerZ) in the given world.
     public GameBorder(Plugin plugin, World world, double centerX, double centerY, double centerZ) {
@@ -80,8 +95,9 @@ public class GameBorder {
         return this;
     }
 
-    // Render mode for a player, treating a null resolver result as SHADER.
+    // Render mode for a player, treating a null resolver result as SHADER. Without a pack there is no shader wall, so everyone gets particles.
     BorderRenderMode renderModeFor(UUID uuid) {
+        if (!packConfigured) return BorderRenderMode.PARTICLE;
         BorderRenderMode mode = renderModeResolver.apply(uuid);
         return mode != null ? mode : BorderRenderMode.SHADER;
     }
@@ -89,6 +105,11 @@ public class GameBorder {
     // Sets the damage applied per second to a player who has been outside the border longer than the grace period. 0 disables damage entirely.
     public void setDamagePerSecond(double damage) {
         this.damagePerSecond = damage;
+    }
+
+    // Returns true once spawn() has run and before remove() has.
+    public boolean isActive() {
+        return active;
     }
 
     // Returns true if (x, z) lies outside the current radius (ignores ceiling/floor - use isAboveHeight / isBelowMinHeight for those).
@@ -140,7 +161,7 @@ public class GameBorder {
 
     // Returns true if the border has a ceiling configured.
     public boolean hasHeightLimit() {
-        return maxHeight != BorderPhaseController.Phase.NO_HEIGHT_LIMIT;
+        return maxHeight != NO_HEIGHT_LIMIT;
     }
 
     // Returns true if y is below the current floor.
@@ -150,7 +171,7 @@ public class GameBorder {
 
     // Returns true if the border has a floor configured.
     public boolean hasMinHeight() {
-        return minHeight != BorderPhaseController.Phase.NO_MIN_HEIGHT;
+        return minHeight != NO_MIN_HEIGHT;
     }
 
     // Activates the border: spawns the wall display grid and starts the damage tracker.
@@ -159,16 +180,29 @@ public class GameBorder {
         if (callbacks == null) {
             throw new IllegalStateException("GameBorder.withCallbacks(...) must be called before spawn()");
         }
+        // Reset the whole shape, not just the radius - a border re-spawned after remove() would otherwise keep the last phase's centre and ceiling.
         this.radius = initialRadius;
+        this.centerX = initialCenterX;
+        this.centerZ = initialCenterZ;
+        this.maxHeight = NO_HEIGHT_LIMIT;
+        this.minHeight = NO_MIN_HEIGHT;
         this.active = true;
+        this.packConfigured = callbacks.wallItemModel() != null;
 
-        renderer.spawn();
+        // No item-model key means no resource pack, so the display grid would render nothing - skip it and leave every player on particles.
+        if (packConfigured) {
+            renderer.spawn();
+        } else {
+            log.info("[GameBorder] No wallItemModel configured - rendering the border as particles for every player");
+        }
         particleRenderer.start();
-        if (damagePerSecond > 0) damageTracker.start();
+        // Always tracked: the tracker owns the warning title, the enter sounds and the height indicators, not just damage.
+        damageTracker.start();
     }
 
     // Removes the border: cancels animations, despawns the wall grid, stops damage tracking.
     public void remove() {
+        if (controller != null) controller.stop();
         animator.reset();
         active = false;
         renderer.remove();

@@ -115,7 +115,7 @@ final class BorderShrinkAnimator {
     // Lerp the ceiling Y.
     private double computeHeight(double progress) {
         if (progress >= 1.0) return endHeight;
-        double noLimit = BorderPhaseController.Phase.NO_HEIGHT_LIMIT;
+        double noLimit = GameBorder.NO_HEIGHT_LIMIT;
         double effStart = startHeight == noLimit ? border.world.getMaxHeight() : startHeight;
         double effEnd = endHeight == noLimit ? border.world.getMaxHeight() : endHeight;
         if (effStart == effEnd) return effEnd;
@@ -125,7 +125,7 @@ final class BorderShrinkAnimator {
     // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with the world's min build height so the floor visibly rises from below.
     private double computeMinHeight(double progress) {
         if (progress >= 1.0) return endMinHeight;
-        double noFloor = BorderPhaseController.Phase.NO_MIN_HEIGHT;
+        double noFloor = GameBorder.NO_MIN_HEIGHT;
         double effStart = startMinHeight == noFloor ? border.world.getMinHeight() : startMinHeight;
         double effEnd = endMinHeight == noFloor ? border.world.getMinHeight() : endMinHeight;
         if (effStart == effEnd) return effEnd;
