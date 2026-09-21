@@ -93,7 +93,7 @@ classpath, so it has to be bundled into your plugin jar or you get a
 
 ```kotlin
 plugins {
-    id("com.gradleup.shadow") version "9.6.1"
+    id("com.gradleup.shadow") version "9.0.0"
 }
 
 tasks.jar { enabled = false }
@@ -106,6 +106,11 @@ optional: rift-border has no static state and no transitive dependencies
 (`paper-api` is `compileOnly`, so the published POM is empty), which means two
 plugins bundling it do not collide. Relocate it anyway if you want to pin a
 version independently of whatever else is on the server.
+
+Shadow's version has to match your Gradle. `9.0.0` is verified on Gradle 9.0.0.
+Newer Shadow releases (9.6.x) fail at configuration time on Gradle 9.0.x with a
+missing `AdhocComponentWithVariants` method; if you want a newer Shadow, run a
+newer Gradle to go with it.
 
 ## Usage
 
