@@ -293,8 +293,10 @@ geometry reaches the shader through the display's scale: **X and Y carry the
 live radius, Z carries the pattern-anchor radius** (the transition target while
 shrinking, so the pattern does not slide mid-shrink).
 
-This library does not ship a default pack. If you'd like one, message
-`Nateiwnl` on Discord.
+The pack that implements this contract is not published. Particle mode is the
+supported path for third parties today; a future plugin release will bundle
+and serve the pack itself. Until then, message `Nateiwnl` on Discord if you
+want it, or write your own against the contract above.
 
 ## Example
 
