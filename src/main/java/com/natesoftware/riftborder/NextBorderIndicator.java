@@ -7,7 +7,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-// Pulses a faint white particle ring once per second along the boundary of the BorderPhaseController's next phase target, so players can see...
+/**
+ * Pulses a faint white particle ring along the boundary of a {@link BorderPhaseController}'s current phase target, so players
+ * can see where the border will land before it moves. Every 40 ticks it sends one white dust particle per block of circumference,
+ * at least 16 in all, to every player in the world, at that player's own Y and only for ring points within 80 blocks of them on
+ * the horizontal plane. The ring is rebuilt whenever the controller's phase index changes, so it appears as a phase's wait begins,
+ * stays through the shrink, and shows nothing while no phase is active or the target radius is 0 or less. A schedule restarted
+ * on the same index keeps the old ring until the index changes or {@link #stop()} clears it. It ignores the border's participant
+ * set and render modes.
+ */
 public final class NextBorderIndicator {
 
     private static final int PULSE_TICKS = 40; // single-tick flash every two seconds
@@ -27,19 +35,26 @@ public final class NextBorderIndicator {
 
     private BukkitTask task;
 
+    /**
+     * Creates an indicator that reads its target from phaseController and shows it to the players of world, which should be the
+     * world the controller's border lives in. plugin owns the pulse task. Nothing runs until {@link #start()}.
+     */
     public NextBorderIndicator(Plugin plugin, World world, BorderPhaseController phaseController) {
         this.plugin = plugin;
         this.world = world;
         this.phaseController = phaseController;
     }
 
-    // Begins pulsing the indicator.
+    /** Begins pulsing the indicator, with the first pulse 40 ticks from now. Calling it while running restarts the timer. */
     public void start() {
         stop();
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, PULSE_TICKS, PULSE_TICKS);
     }
 
-    // Stops the indicator and clears its cached ring geometry.
+    /**
+     * Stops the indicator and clears its cached ring geometry, so the next {@link #start()} rebuilds it. Safe to call when not
+     * running. Particles already sent fade on their own.
+     */
     public void stop() {
         if (task != null) {
             task.cancel();

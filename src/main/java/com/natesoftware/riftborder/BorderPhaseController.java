@@ -12,7 +12,26 @@ import org.bukkit.scheduler.BukkitTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// Convenience orchestrator that drives a GameBorder through a sequence of BorderPhase. Optional - drive moveTo yourself to skip it.
+/**
+ * Drives a {@link GameBorder} through a schedule of {@link BorderPhase}s: for each phase in turn it holds the border still for
+ * the wait, then shrinks it over the shrink time to the phase's end radius, ceiling and floor at a centre chosen by a
+ * {@link ShrinkTargetSelector}, applying the phase's damage rate from the moment the phase is entered. Optional: a host that
+ * calls {@link GameBorder#moveTo(double, double, double, int)} itself needs none of this, and the two must not be mixed, since
+ * the controller owns the shape while it runs.
+ * <p>
+ * Where each phase lands is resolved lazily, one phase at a time: under natural progression as the phase's wait begins, or on
+ * demand by a resync for every not-yet-placed phase up to the one it lands in, in order. The selector's answer is clamped along
+ * its ray from the circle the phase shrinks from so each circle nests in the previous one. Phase 1 shrinks from the border
+ * centre snapshotted at {@link #start(int)} and the constructor's initialRadius, later phases from the previous phase's resolved
+ * target and end radius. The schedule is laid out against a game clock counting down in seconds from the value given to
+ * {@link #start(int)}, which is what {@link #syncToGameTimer(int)} realigns against.
+ * <p>
+ * Constructing one registers it on the border, so {@link GameBorder#remove()} stops it and the border's shrink completion
+ * advances it through a slot separate from the host's {@link GameBorder#onShrinkComplete(Runnable)}, which still fires after the
+ * advance. Everything runs on the main thread: a wait ends in the controller's scheduled task, a shrink's completion arrives
+ * from the border's animation task, and everything else happens inside the calling method. {@link NextBorderIndicator} can
+ * preview the current target.
+ */
 public class BorderPhaseController {
 
     private static final Logger log = LoggerFactory.getLogger(BorderPhaseController.class);
@@ -54,6 +73,16 @@ public class BorderPhaseController {
     private BukkitTask waitTask;
     private Runnable onAllPhasesComplete;
 
+    /**
+     * Creates a controller for border over a copy of phases, which are not validated. mapCenterX and mapCenterZ are the map centre
+     * handed to selectors through {@link ShrinkContext} and the target of {@link ShrinkTargetSelector#FIXED_CENTER}.
+     * initialRadius is the radius phase 1 shrinks from and the one a resync returns the border to before phase 1, so it should be
+     * what the border is spawned at, a mismatch being only logged by {@link #start(int)}, and only while the border is active.
+     * plugin owns the wait task. The
+     * controller registers itself on the border at once, replacing any earlier controller's registration, so it may be built
+     * before or after {@link GameBorder#spawn(double)}, but {@link #start(int)} belongs after the spawn. The selector defaults to
+     * {@link ShrinkTargetSelector#RANDOM_INSIDE} with an unseeded random. Nothing runs until start.
+     */
     public BorderPhaseController(
         Plugin plugin,
         GameBorder border,
@@ -68,26 +97,50 @@ public class BorderPhaseController {
         this.mapCenterZ = mapCenterZ;
         this.initialRadius = initialRadius;
         border.controller = this;
+        border.internalShrinkComplete = this::advancePhase;
     }
 
-    // Picks where each phase shrinks to. Defaults to a random point inside the current zone.
+    /**
+     * Picks where each phase shrinks to, as described on {@link ShrinkTargetSelector}. Null restores the default,
+     * {@link ShrinkTargetSelector#RANDOM_INSIDE}. Only phases not yet placed consult it, so a change mid-schedule affects the
+     * phases still to come. Returns this for chaining.
+     */
     public BorderPhaseController withTargetSelector(ShrinkTargetSelector selector) {
         this.targetSelector = selector != null ? selector : ShrinkTargetSelector.RANDOM_INSIDE;
         return this;
     }
 
-    // Shorthand for withTargetSelector(FIXED_CENTER): every phase shrinks toward the map centre passed to the constructor.
+    /**
+     * Shorthand for {@link #withTargetSelector(ShrinkTargetSelector)} with {@link ShrinkTargetSelector#FIXED_CENTER} when
+     * fixedCenter is true, so every phase shrinks toward the map centre passed to the constructor, and with
+     * {@link ShrinkTargetSelector#RANDOM_INSIDE} when false. Returns this for chaining.
+     */
     public BorderPhaseController withFixedCenter(boolean fixedCenter) {
         return withTargetSelector(fixedCenter ? ShrinkTargetSelector.FIXED_CENTER : ShrinkTargetSelector.RANDOM_INSIDE);
     }
 
-    // Source of randomness handed to selectors - seed it per round for reproducible zones.
+    /**
+     * Source of randomness handed to selectors through {@link ShrinkContext#rng()}, shared by every phase of the schedule. Seed
+     * it per round to reproduce the same zones from the same schedule and selector. Null restores an unseeded {@code Random}.
+     * Returns this for chaining.
+     */
     public BorderPhaseController withRandom(Random random) {
         this.random = random != null ? random : new Random();
         return this;
     }
 
-    // Begins phase progression.
+    /**
+     * Begins phase progression against a game clock of gameDuration seconds, entering phase 1's wait immediately: its target is
+     * resolved, its damage rate applied to the border, {@link BorderCallbacks#phaseStarted(int, int, int)} and
+     * {@link BorderCallbacks#playPhaseSound()} called synchronously, and the wait scheduled. The border's centre at this moment
+     * is snapshotted as the circle phase 1 shrinks from, together with the constructor's initialRadius, and while the border is
+     * active a live radius that differs from initialRadius is logged as a warning, since the clamp uses initialRadius regardless.
+     * Calling it again, including after {@link #stop()}, restarts from phase 1 with fresh targets and an unpaused state, cancelling
+     * the previous run's pending wait but not moving the border back, so phase 1 then shrinks from wherever the border now sits.
+     * A restart while a shrink from the previous run is still in flight should go through {@link #stop()} first, since that
+     * shrink's completion would otherwise advance the new run. An empty schedule completes at once, firing the all-phases
+     * callback. A gameDuration shorter than the schedule is allowed, later boundaries simply falling below zero.
+     */
     public void start(int gameDuration) {
         this.gameDuration = gameDuration;
         // Reset the cursor too, so a controller restarted after stop() begins at phase 1 rather than resuming stale state.
@@ -97,22 +150,45 @@ public class BorderPhaseController {
         paused = false;
         startCenterX = border.getCenterX();
         startCenterZ = border.getCenterZ();
+        if (border.isActive() && border.getRadius() != initialRadius) {
+            log.warn("[BorderPhase] initialRadius {} does not match the live border radius {} - phase 1 will clamp against {}",
+                initialRadius, border.getRadius(), initialRadius);
+        }
         precomputeTimeline();
         advancePhase();
     }
 
-    // Cancels the controller.
+    /**
+     * Cancels the controller: the pending wait is cancelled, the border's transition is reset so an in-flight shrink freezes
+     * where it is rather than landing on a target the controller no longer owns, and neither the shrink-completion hook nor
+     * {@link #syncToGameTimer(int)} does anything until the next {@link #start(int)}. The damage rate stays at the current
+     * phase's, and the phase index, target and shrinking flag keep their last values. Neither the all-phases callback nor
+     * {@link GameBorder#onShrinkComplete(Runnable)} fires for the frozen shrink. Called by {@link GameBorder#remove()}. Safe to
+     * repeat.
+     */
     public void stop() {
         stopped = true;
         cancelWait();
+        border.animator.reset();
     }
 
-    // Sets a callback invoked when all phases finish (the border has fully closed).
+    /**
+     * Sets the callback run once every phase has landed and the border sits at the last phase's shape, replacing any earlier
+     * one, with null clearing it. It runs on the main thread: from the final shrink's completion under natural progression, or
+     * synchronously inside a {@link #syncToGameTimer(int)} that snaps past the end of the schedule, but not again from a repeat
+     * resync past the end while the schedule is already complete. On an empty schedule it fires from {@link #start(int)}.
+     */
     public void setOnAllPhasesComplete(Runnable callback) {
         this.onAllPhasesComplete = callback;
     }
 
-    // Pauses the current sub-phase (WAIT or SHRINK).
+    /**
+     * Freezes the current wait or shrink where it is: a pending wait is cancelled with its remaining ticks remembered, an
+     * in-flight shrink is paused on the border, and {@link #getSubPhaseRemaining()} holds at the frozen value. Damage keeps
+     * applying, since the tracker belongs to the border. A resync while paused repositions the border and leaves it frozen
+     * there for {@link #resume()}. Does nothing when already paused, and before {@link #start(int)} or after the schedule ends
+     * it only records the flag, which start clears.
+     */
     public void pause() {
         if (paused) return;
         paused = true;
@@ -125,7 +201,12 @@ public class BorderPhaseController {
         }
     }
 
-    // Resumes a paused sub-phase from where pause froze it.
+    /**
+     * Continues from where {@link #pause()} froze things. A wait is rescheduled for its remembered remainder, and a shrink resumes
+     * on the border over its remembered remainder, re-interpolating from the frozen shape to the same target. In both cases the
+     * countdown from {@link #getSubPhaseRemaining()} restarts from that remainder rather than counting the paused ticks as
+     * elapsed. Does nothing when not paused.
+     */
     public void resume() {
         if (!paused) return;
         paused = false;
@@ -134,16 +215,38 @@ public class BorderPhaseController {
             subPhaseDurationTicks = pausedRemainingTicks;
             scheduleWaitTicks(pausedRemainingTicks);
         } else if (subPhase == SubPhase.SHRINK) {
+            // the HUD countdown restarts from the frozen remainder too, or the paused ticks would read as elapsed
+            subPhaseStartTick = currentTick();
+            subPhaseDurationTicks = pausedRemainingTicks;
             border.resumeShrinking(pausedRemainingTicks);
         }
     }
 
+    /**
+     * Realigns the controller with an external game clock reading gameSecondsRemaining, assuming that clock's next decrement is a
+     * full second away. Equivalent to {@link #syncToGameTimer(int, long)} with an offset of 20 ticks.
+     */
     public void syncToGameTimer(int gameSecondsRemaining) {
         syncToGameTimer(gameSecondsRemaining, 20L);
     }
 
-    // firstDecrementOffset: ticks from now until the sub-phase display should next drop, so the phase HUD timer stays aligned with an external
-    // game timer that may already be partway through its current second.
+    /**
+     * Realigns the controller with an external game clock that reads gameSecondsRemaining, jumping the border and the phase
+     * cursor to wherever the schedule laid out by {@link #start(int)} places them and resolving targets, in order, for every
+     * phase up to that point that has none yet. Landing in a phase's wait snaps the border to the previous phase's end shape, or
+     * before phase 1 to the start centre, initialRadius and no ceiling or floor, applies that phase's damage rate, calls
+     * {@link BorderCallbacks#phaseStarted(int, int, int)} with the remaining wait, and schedules it. Landing mid-shrink snaps
+     * the border to the interpolated point along that shrink, applies the damage rate, calls
+     * {@link BorderCallbacks#shrinkStarted()}, and resumes the shrink over the remaining seconds. No phase or shrink sound plays
+     * on a resync. A reading above the gameDuration given to {@link #start(int)}, whatever the schedule adds up to, stretches
+     * phase 1's wait to absorb the surplus rather than snapping the border shut. A reading at or below the end of the last shrink
+     * snaps the border closed on the last phase's target, radius, ceiling and floor, applies its damage rate, and fires the
+     * all-phases callback unless the schedule was already complete. While paused the border is repositioned but stays frozen for
+     * {@link #resume()}. firstDecrementOffset is how many ticks until the game clock next drops a second: the part of the current
+     * second it has already spent, at most 19 ticks, is taken off the remaining wait or shrink itself, and so off
+     * {@link #getSubPhaseRemaining()}, so both stay in step with the host's timer. A no-op before {@link #start(int)}, after
+     * {@link #stop()} and on an empty schedule.
+     */
     public void syncToGameTimer(int gameSecondsRemaining, long firstDecrementOffset) {
         if (stopped) return;
         // The timeline only exists after start() - syncing before that would index an empty list.
@@ -180,43 +283,69 @@ public class BorderPhaseController {
 
         // Past all phases - border fully closed.
         if (!phases.isEmpty()) {
+            boolean wasComplete = currentPhase >= phases.size();
             int lastIdx = phases.size() - 1;
             BorderPoint target = targetFor(lastIdx);
             BorderPhase last = phases.get(lastIdx);
             border.setPosition(target.x(), target.z(), last.endRadius(), last.endHeight(), last.endMinHeight());
+            border.setDamagePerSecond(last.damage());
             currentPhase = phases.size();
             subPhase = null;
+            // landing here by resync still means every phase has finished - fire the hook once, as advancePhase would have
+            if (!wasComplete && onAllPhasesComplete != null) onAllPhasesComplete.run();
         }
     }
 
+    /** Alias of {@link #syncToGameTimer(int)} for hosts that phrase the resync as setting the time remaining. */
     public void setRemainingTime(int totalSeconds) {
         syncToGameTimer(totalSeconds, 20L);
     }
 
+    /** Alias of {@link #syncToGameTimer(int, long)}. */
     public void setRemainingTime(int totalSeconds, long firstDecrementOffset) {
         syncToGameTimer(totalSeconds, firstDecrementOffset);
     }
 
-    // Returns true while the border is mid-shrink (as opposed to waiting).
+    /**
+     * Returns true while the current phase is in its shrink rather than its wait, paused mid-shrink included, and false before
+     * {@link #start(int)}, during a wait and once every phase has landed. {@link #stop()} leaves it at its last value.
+     */
     public boolean isShrinking() {
         return subPhase == SubPhase.SHRINK;
     }
 
+    /**
+     * Zero-based index of the phase in progress: -1 before {@link #start(int)}, 0 up to the schedule length minus one while a
+     * phase waits or shrinks, and the schedule length once every phase has landed. Callbacks receive the one-based number.
+     */
     public int getCurrentPhase() {
         return currentPhase;
     }
 
-    // Centre the current phase is shrinking toward (or about to, during WAIT), or null when no phase is active.
+    /**
+     * Centre the current phase is shrinking toward, or will shrink toward once its wait ends, after the controller's clamp. Null
+     * before {@link #start(int)} and once every phase has landed.
+     */
     public BorderPoint getTargetCenter() {
         if (currentPhase < 0 || currentPhase >= phases.size()) return null;
         return currentPhase < phaseTargets.size() ? phaseTargets.get(currentPhase) : null;
     }
 
+    /**
+     * End radius of the current phase in blocks, whether it is waiting or shrinking, or -1 before {@link #start(int)} and once
+     * every phase has landed. {@link NextBorderIndicator} draws nothing for 0 or less.
+     */
     public double getTargetRadius() {
         if (currentPhase < 0 || currentPhase >= phases.size()) return -1;
         return phases.get(currentPhase).endRadius();
     }
 
+    /**
+     * Whole seconds left in the current wait or shrink for a HUD countdown, rounded up, so a sub-phase of N seconds reads N for
+     * its entire first second and reaches 0 only on the tick it ends, matching a once-per-second game timer. Holds at the frozen
+     * remainder while paused. 0 before {@link #start(int)} and once every phase has landed, and never negative. After a resync
+     * with a first-decrement offset the value is already shortened to match the host clock.
+     */
     public int getSubPhaseRemaining() {
         if (currentPhase < 0 || currentPhase >= phases.size() || subPhase == null) return 0;
         // Ceiling division so the displayed second stays at N for the full first second, matching CountdownTimer's once-per-second decrement.
@@ -324,7 +453,6 @@ public class BorderPhaseController {
 
         border.callbacks.shrinkStarted();
         border.callbacks.playShrinkSound();
-        border.onShrinkComplete(this::advancePhase);
         border.moveTo(
             target.x(), target.z(), phase.endRadius(), phase.endHeight(), phase.endMinHeight(), subPhaseDurationTicks);
     }
@@ -405,7 +533,6 @@ public class BorderPhaseController {
         subPhaseDurationTicks = remainingSeconds * 20 - offsetCompensation;
 
         border.callbacks.shrinkStarted();
-        border.onShrinkComplete(this::advancePhase);
         border.moveTo(
             target.x(), target.z(), phase.endRadius(), phase.endHeight(), phase.endMinHeight(), subPhaseDurationTicks);
         if (paused) {

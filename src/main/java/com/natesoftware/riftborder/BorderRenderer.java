@@ -5,8 +5,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -15,6 +17,7 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
@@ -35,16 +38,13 @@ final class BorderRenderer {
     // Just one tick: long enough to cover client spawn processing, short enough that the double-blend darkening is a single frame blip.
     private static final int HANDOFF_OVERLAP_TICKS = 1;
 
-    // Grid spacing in blocks (5 chunks).
-    private static final int GRID_SPACING = 80;
-    // Hard ceiling on the grid half-extent (1000x1000 play area).
-    private static final int MAX_GRID_EXTENT = 500;
-    // Y level to spawn grid entities - above terrain to avoid block occlusion.
-    private static final int GRID_SPAWN_Y = 319;
+    // Ids of every border this copy of the library has spawned and not yet removed. The orphan sweep leaves their entities alone,
+    // so two live borders in one world no longer delete each other's walls. Per-classloader, so bundled copies never share it.
+    private static final Set<UUID> LIVE = ConcurrentHashMap.newKeySet();
 
     private final GameBorder border;
 
-    // PDC tag for orphan cleanup.
+    // PDC tag for orphan cleanup. The value is the owning border's id.
     private final NamespacedKey borderTag;
 
     // Grid position (packed long) -> entity.
@@ -71,16 +71,23 @@ final class BorderRenderer {
         borderItem = new ItemStack(Material.PAPER);
         borderItem.editMeta(m -> m.setItemModel(border.callbacks.wallItemModel()));
 
+        if (Math.ceil(border.getRadius()) + border.gridSpacing > border.gridMaxExtent) {
+            log.warn("[GameBorder] Radius {} exceeds the anchor grid cap of {} - the wall will not render beyond it. "
+                + "Raise the cap with GameBorder.withGrid(...)", border.getRadius(), border.gridMaxExtent);
+        }
+
         removeOrphanedEntities();
+        LIVE.add(border.id);
         spawnGridEntities();
         startMaintenanceTask();
         startVisibilityTask();
 
-        log.info("[GameBorder] Border active with {} grid entities", gridEntities.size());
+        log.info("[GameBorder] Border active - spawning an anchor grid of +/-{} blocks at {}-block spacing", gridExtent(), border.gridSpacing);
     }
 
     void remove() {
         disposed = true;
+        LIVE.remove(border.id);
         if (maintenanceTask != null) {
             maintenanceTask.cancel();
             maintenanceTask = null;
@@ -104,21 +111,22 @@ final class BorderRenderer {
 
     // Sized to the initial radius - every later phase stays inside the initial zone, so small arenas skip the full-map grid.
     private int gridExtent() {
-        return (int) Math.min(MAX_GRID_EXTENT, Math.ceil(border.getRadius()) + GRID_SPACING);
+        return (int) Math.min(border.gridMaxExtent, Math.ceil(border.getRadius()) + border.gridSpacing);
     }
 
     // Each grid point requires its chunk loaded so we can spawn an ItemDisplay in it.
     private void spawnGridEntities() {
         removeAllEntities();
 
+        int spacing = border.gridSpacing;
         int extent = gridExtent();
-        int startX = alignToGrid((int) Math.floor(border.initialCenterX) - extent);
-        int startZ = alignToGrid((int) Math.floor(border.initialCenterZ) - extent);
+        int startX = alignToGrid((int) Math.floor(border.initialCenterX) - extent, spacing);
+        int startZ = alignToGrid((int) Math.floor(border.initialCenterZ) - extent, spacing);
         int endX = (int) Math.floor(border.initialCenterX) + extent;
         int endZ = (int) Math.floor(border.initialCenterZ) + extent;
 
-        for (int gx = startX; gx <= endX; gx += GRID_SPACING) {
-            for (int gz = startZ; gz <= endZ; gz += GRID_SPACING) {
+        for (int gx = startX; gx <= endX; gx += spacing) {
+            for (int gz = startZ; gz <= endZ; gz += spacing) {
                 final int fx = gx;
                 final int fz = gz;
                 int cx = gx >> 4;
@@ -130,7 +138,7 @@ final class BorderRenderer {
                         border.world.setChunkForceLoaded(cx, cz, true);
                     }
                     long gridKey = packGrid(fx, fz);
-                    gridEntities.put(gridKey, spawnEntityAt(fx, GRID_SPAWN_Y, fz));
+                    gridEntities.put(gridKey, spawnEntityAt(fx, border.anchorY, fz));
                 });
             }
         }
@@ -147,7 +155,7 @@ final class BorderRenderer {
         ItemDisplay entity = border.world.spawn(loc, ItemDisplay.class, e -> {
             e.setPersistent(false);
             e.setVisibleByDefault(false);
-            e.getPersistentDataContainer().set(borderTag, PersistentDataType.BYTE, (byte) 1);
+            e.getPersistentDataContainer().set(borderTag, PersistentDataType.STRING, border.id.toString());
             e.setBillboard(Display.Billboard.FIXED);
             e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
             e.setViewRange(128f);
@@ -192,16 +200,28 @@ final class BorderRenderer {
         gridEntities.clear();
     }
 
+    // Sweeps wall entities left behind by a border that was never removed - a plugin disabled mid-round, a /reload - and nothing else.
     private void removeOrphanedEntities() {
         int removed = 0;
         for (ItemDisplay entity : border.world.getEntitiesByClass(ItemDisplay.class)) {
-            if (entity.getPersistentDataContainer().has(borderTag)) {
-                entity.remove();
-                removed++;
-            }
+            PersistentDataContainer pdc = entity.getPersistentDataContainer();
+            if (!pdc.has(borderTag, PersistentDataType.STRING)) continue;
+            if (isLive(pdc.get(borderTag, PersistentDataType.STRING))) continue;
+            entity.remove();
+            removed++;
         }
         if (removed > 0) {
             log.info("[GameBorder] Removed {} orphaned border entities", removed);
+        }
+    }
+
+    // A tag naming a border that is still spawned marks a live wall, not an orphan. Anything malformed counts as an orphan.
+    private static boolean isLive(String tag) {
+        if (tag == null) return false;
+        try {
+            return LIVE.contains(UUID.fromString(tag));
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
@@ -230,7 +250,7 @@ final class BorderRenderer {
                 if (shown != null && !shown.isDead()) player.hideEntity(border.plugin, shown);
                 continue;
             }
-            Location pLoc = java.util.Objects.requireNonNull(player.getLocation());
+            Location pLoc = Objects.requireNonNull(player.getLocation());
             double px = pLoc.getX();
             double pz = pLoc.getZ();
 
@@ -295,7 +315,7 @@ final class BorderRenderer {
                             int gx = unpackGridX(entry.getKey());
                             int gz = unpackGridZ(entry.getKey());
                             forceLoadChunkAt(gx, gz);
-                            entry.setValue(spawnEntityAt(gx, GRID_SPAWN_Y, gz));
+                            entry.setValue(spawnEntityAt(gx, border.anchorY, gz));
                             respawned = true;
                         }
                     }
@@ -323,8 +343,8 @@ final class BorderRenderer {
         forceLoadedChunks.clear();
     }
 
-    private static int alignToGrid(int value) {
-        return value - Math.floorMod(value, GRID_SPACING);
+    private static int alignToGrid(int value, int spacing) {
+        return value - Math.floorMod(value, spacing);
     }
 
     private static long packGrid(int x, int z) {

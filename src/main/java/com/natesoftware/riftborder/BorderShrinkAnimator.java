@@ -115,6 +115,8 @@ final class BorderShrinkAnimator {
     // Lerp the ceiling Y.
     private double computeHeight(double progress) {
         if (progress >= 1.0) return endHeight;
+        // unchanged at both ends means unchanged throughout - a border with no ceiling must not grow one for the transition's duration
+        if (startHeight == endHeight) return endHeight;
         double noLimit = GameBorder.NO_HEIGHT_LIMIT;
         double effStart = startHeight == noLimit ? border.world.getMaxHeight() : startHeight;
         double effEnd = endHeight == noLimit ? border.world.getMaxHeight() : endHeight;
@@ -125,6 +127,7 @@ final class BorderShrinkAnimator {
     // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with the world's min build height so the floor visibly rises from below.
     private double computeMinHeight(double progress) {
         if (progress >= 1.0) return endMinHeight;
+        if (startMinHeight == endMinHeight) return endMinHeight;
         double noFloor = GameBorder.NO_MIN_HEIGHT;
         double effStart = startMinHeight == noFloor ? border.world.getMinHeight() : startMinHeight;
         double effEnd = endMinHeight == noFloor ? border.world.getMinHeight() : endMinHeight;
@@ -144,9 +147,10 @@ final class BorderShrinkAnimator {
                     applyProgress();
                     if (elapsedTicks >= totalTicks) {
                         stop();
-                        if (border.onShrinkComplete != null) {
-                            border.onShrinkComplete.run();
-                        }
+                        started = false;
+                        // controller first so a host callback that reads phase state sees the advanced phase
+                        if (border.internalShrinkComplete != null) border.internalShrinkComplete.run();
+                        if (border.onShrinkComplete != null) border.onShrinkComplete.run();
                     }
                 },
                 BorderRenderer.UPDATE_INTERVAL_TICKS,

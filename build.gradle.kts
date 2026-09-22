@@ -4,11 +4,12 @@ plugins {
 }
 
 group = "com.natesoftware"
-version = "1.1.0"
+version = "1.2.0"
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
     withSourcesJar()
+    withJavadocJar()
 }
 
 repositories {
@@ -18,11 +19,28 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core:5.12.0")
+    // compileOnly is not on the test classpath, and the tests mock Plugin / World / scheduler
+    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-Xlint:deprecation")
+}
+
+tasks.javadoc {
+    // The Javadoc voice carries no @param/@return tags, so doclint's "missing" group would flag every documented member
+    (options as StandardJavadocDocletOptions).addBooleanOption("Xdoclint:all,-missing", true)
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // Mockito's inline mock maker attaches an agent at runtime, which Java 21 warns about unless allowed up front
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 publishing {

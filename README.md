@@ -1,5 +1,7 @@
 # rift-border
 
+[![build](https://github.com/natesoftware/rift-border/actions/workflows/build.yml/badge.svg)](https://github.com/natesoftware/rift-border/actions/workflows/build.yml)
+
 A volumetric circular border for Paper 1.21.11 servers. Renders a shrinkable
 cylinder, animates shape transitions, and damages players who stray outside the
 radius or beyond an optional ceiling / floor.
@@ -49,7 +51,7 @@ includeBuild("../rift-border")
 `build.gradle.kts`:
 ```kotlin
 dependencies {
-    implementation("com.natesoftware:rift-border:1.1.0")
+    implementation("com.natesoftware:rift-border:1.2.0")
 }
 ```
 
@@ -70,7 +72,7 @@ repositories {
     mavenLocal()
 }
 dependencies {
-    implementation("com.natesoftware:rift-border:1.1.0")
+    implementation("com.natesoftware:rift-border:1.2.0")
 }
 ```
 
@@ -81,7 +83,7 @@ repositories {
     maven("https://jitpack.io")
 }
 dependencies {
-    implementation("com.github.natesoftware:rift-border:v1.1.0")
+    implementation("com.github.natesoftware:rift-border:v1.2.0")
 }
 ```
 
@@ -102,8 +104,9 @@ tasks.build { dependsOn(tasks.shadowJar) }
 ```
 
 Keep the dependency as `implementation` and Shadow bundles it. Relocation is
-optional: rift-border has no static state and no transitive dependencies
-(`paper-api` is `compileOnly`, so the published POM is empty), which means two
+optional: rift-border has no transitive dependencies (`paper-api` is
+`compileOnly`, so the published POM is empty) and its only static state is a
+set of live border ids that is private to each plugin's bundled copy, so two
 plugins bundling it do not collide. Relocate it anyway if you want to pin a
 version independently of whatever else is on the server.
 
@@ -260,8 +263,14 @@ resolver to let them choose:
 border.withRenderModeResolver(uuid -> preferences.renderMode(uuid));
 ```
 
-Shader mode supports **one live border per world per plugin**: spawning a
-second one sweeps the first one's wall entities.
+Shader mode mounts its wall on an anchor grid: one invisible display every 80
+blocks, out to 500 blocks from the centre. A radius past that cap renders no
+wall on its far side and logs a warning at spawn. Both numbers are tunable:
+
+```java
+border.withGrid(80, 1200)   // spacing, max extent
+      .withAnchorY(200);    // where the anchors sit; defaults to just under the build limit
+```
 
 ### Pack contract
 
@@ -274,6 +283,16 @@ shrinking, so the pattern does not slide mid-shrink).
 
 This library does not ship a default pack. If you'd like one, message
 `Nateiwnl` on Discord.
+
+## Development
+
+```bash
+./gradlew build      # compiles, runs the tests, builds the jar, sources jar and javadoc jar
+./gradlew test       # the suite alone - the schedule, animator, damage tracker and selectors run against a fake scheduler, no server needed
+./gradlew javadoc    # API docs into build/docs/javadoc
+```
+
+The public types carry Javadoc; the internals carry `//` notes. CI runs `build` on every push and pull request.
 
 ## Licence
 

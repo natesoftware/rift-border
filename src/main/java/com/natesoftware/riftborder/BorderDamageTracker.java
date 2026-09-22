@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 import net.kyori.adventure.text.Component;
@@ -45,6 +46,9 @@ final class BorderDamageTracker {
             Title.Times.times(Duration.ZERO, Duration.ofDays(1), Duration.ZERO);
 
     private final GameBorder border;
+
+    // Wall clock behind the grace period and the long-outside cadence - tests swap it so they never have to sleep.
+    LongSupplier clock = System::currentTimeMillis;
 
     private final Set<UUID> outsidePlayers = new HashSet<>();
     private final Map<UUID, Long> outsideSinceMs = new HashMap<>();
@@ -85,7 +89,7 @@ final class BorderDamageTracker {
             if (p == null || !p.isOnline()) continue;
             // the warning title has a day-long stay, so a player still outside at teardown keeps it until something clears it
             if (warningTitle != null) p.clearTitle();
-            if (enterLongSoundKey != null) p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
+            if (lastLongPlayedMs.containsKey(uuid) && enterLongSoundKey != null) p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
         }
         outsidePlayers.clear();
         outsideSinceMs.clear();
@@ -149,14 +153,14 @@ final class BorderDamageTracker {
         if (outside) {
             if (!was) {
                 outsidePlayers.add(player.getUniqueId());
-                outsideSinceMs.put(player.getUniqueId(), System.currentTimeMillis());
+                outsideSinceMs.put(player.getUniqueId(), clock.getAsLong());
                 border.callbacks.onWarningShown(player.getUniqueId());
                 if (enterSoundKey != null) {
                     player.playSound(loc, enterSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
                 if (warningTitle != null) player.showTitle(warningTitle);
             } else {
-                long now = System.currentTimeMillis();
+                long now = clock.getAsLong();
                 Long enteredAt = outsideSinceMs.get(player.getUniqueId());
                 Long lastPlayed = lastLongPlayedMs.get(player.getUniqueId());
                 boolean dueForLong = enteredAt != null
@@ -171,7 +175,7 @@ final class BorderDamageTracker {
                 }
             }
             if (shouldDamage) {
-                long now = System.currentTimeMillis();
+                long now = clock.getAsLong();
                 Long enteredAt = outsideSinceMs.get(player.getUniqueId());
                 if (enteredAt != null && now - enteredAt >= DAMAGE_GRACE_MS) {
                     applyBorderDamage(player);
