@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.natesoftware"
-version = "1.2.0"
+version = "1.3.0"
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -25,6 +25,11 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.12.0")
     // compileOnly is not on the test classpath, and the tests mock Plugin / World / scheduler
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+}
+
+// The licence travels with the binary, since consumers redistribute it inside their own jar.
+tasks.withType<Jar>().configureEach {
+    from(layout.projectDirectory.file("LICENSE")) { into("META-INF") }
 }
 
 tasks.withType<JavaCompile>().configureEach {

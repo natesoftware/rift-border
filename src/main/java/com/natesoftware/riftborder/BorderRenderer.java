@@ -207,11 +207,14 @@ final class BorderRenderer {
             PersistentDataContainer pdc = entity.getPersistentDataContainer();
             if (!pdc.has(borderTag, PersistentDataType.STRING)) continue;
             if (isLive(pdc.get(borderTag, PersistentDataType.STRING))) continue;
+            // the flag the dead border pinned for this anchor outlived it in level.dat - release it along with the entity
+            Location at = entity.getLocation();
+            border.world.setChunkForceLoaded(at.getBlockX() >> 4, at.getBlockZ() >> 4, false);
             entity.remove();
             removed++;
         }
         if (removed > 0) {
-            log.info("[GameBorder] Removed {} orphaned border entities", removed);
+            log.info("[GameBorder] Removed {} orphaned border entities and released their chunks", removed);
         }
     }
 

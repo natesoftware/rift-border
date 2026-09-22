@@ -216,7 +216,8 @@ final class BorderDamageTracker {
             if (gone || noLongerParticipant) {
                 border.callbacks.onWarningCleared(uuid);
                 if (p != null && p.isOnline()) {
-                    p.clearTitle();
+                    // guarded like the other exit paths - with no warning title configured there is nothing of ours to clear
+                    if (warningTitle != null) p.clearTitle();
                     if (lastLongPlayedMs.containsKey(uuid) && enterLongSoundKey != null) {
                         p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
                     }

@@ -51,7 +51,7 @@ includeBuild("../rift-border")
 `build.gradle.kts`:
 ```kotlin
 dependencies {
-    implementation("com.natesoftware:rift-border:1.2.0")
+    implementation("com.natesoftware:rift-border:1.3.0")
 }
 ```
 
@@ -72,7 +72,7 @@ repositories {
     mavenLocal()
 }
 dependencies {
-    implementation("com.natesoftware:rift-border:1.2.0")
+    implementation("com.natesoftware:rift-border:1.3.0")
 }
 ```
 
@@ -83,7 +83,7 @@ repositories {
     maven("https://jitpack.io")
 }
 dependencies {
-    implementation("com.github.natesoftware:rift-border:v1.2.0")
+    implementation("com.github.natesoftware:rift-border:v1.3.0")
 }
 ```
 
@@ -166,9 +166,14 @@ BorderPhaseController controller =
 controller.start(gameDurationSeconds);
 
 // Optional: pulse a faint ring where the next phase will land
-NextBorderIndicator indicator = new NextBorderIndicator(plugin, world, controller);
+NextBorderIndicator indicator = new NextBorderIndicator(controller);
 indicator.start();
 ```
+
+`gameDurationSeconds` is the clock every later `setRemainingTime` reading is
+measured against. Under natural progression it only needs to cover the
+schedule (the sum of every phase's wait and shrink); pass your own round
+length if you sync to a game timer.
 
 `BorderPhase` has longer constructors that add a ceiling Y and a floor Y for
 that phase. Do not also call `moveTo` yourself while a controller is running;
@@ -208,8 +213,7 @@ result during the wait.
 Always tear down when the match ends and on plugin disable:
 
 ```java
-indicator.stop();     // if you started one
-border.remove();      // also stops any controller attached to it
+border.remove();      // also stops any controller and indicator attached to it
 ```
 
 In shader mode the border force-loads the chunks holding its wall anchors while
@@ -236,11 +240,19 @@ What players get out of the box:
 | | Default |
 | --- | --- |
 | Damage outside the border | 2.0 / s, after a 1 s grace, with the vanilla hurt flash and sound |
-| Warning title | none (`warningTitle()` returns null) |
+| Warning title | none (`warningTitle()` returns null). When set, it owns the player's title slot while they are outside |
 | Sound on crossing out | `minecraft:block.anvil.land` |
 | Sound while still outside | `minecraft:entity.wither.spawn`, every 5 s |
 | Particle wall colour | white |
 | Creative / spectator | ignored |
+
+Border damage writes health directly. Non-lethal ticks fire no
+`EntityDamageEvent`, so armour, Resistance and other plugins' damage listeners
+do not see them; only the killing tick goes through `Player.damage` with the
+`OUTSIDE_BORDER` damage type. If you need event-visible damage, set the rate
+to 0 (the warnings and sounds keep working) and deal it yourself from
+`onWarningShown` / `onWarningCleared`, which tell you exactly who is outside
+and when they return.
 
 ## Rendering
 
@@ -284,6 +296,14 @@ shrinking, so the pattern does not slide mid-shrink).
 This library does not ship a default pack. If you'd like one, message
 `Nateiwnl` on Discord.
 
+## Example
+
+[`examples/ExamplePlugin.java`](examples/ExamplePlugin.java) is a complete
+plugin assembled from the snippets above: it spawns a border around the first
+world on enable, drives it through three phases, previews each target, and
+tears everything down on disable. Drop it into a project set up per
+[Bundling](#bundling) with the `plugin.yml` beside it.
+
 ## Development
 
 ```bash
@@ -292,7 +312,9 @@ This library does not ship a default pack. If you'd like one, message
 ./gradlew javadoc    # API docs into build/docs/javadoc
 ```
 
-The public types carry Javadoc; the internals carry `//` notes. CI runs `build` on every push and pull request.
+The public types carry Javadoc, also hosted per release at
+`https://javadoc.jitpack.io/com/github/natesoftware/rift-border/<tag>/javadoc/`;
+the internals carry `//` notes. CI runs `build` on every push and pull request.
 
 ## Licence
 

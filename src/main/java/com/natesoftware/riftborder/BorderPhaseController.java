@@ -26,11 +26,11 @@ import org.slf4j.LoggerFactory;
  * target and end radius. The schedule is laid out against a game clock counting down in seconds from the value given to
  * {@link #start(int)}, which is what {@link #syncToGameTimer(int)} realigns against.
  * <p>
- * Constructing one registers it on the border, so {@link GameBorder#remove()} stops it and the border's shrink completion
- * advances it through a slot separate from the host's {@link GameBorder#onShrinkComplete(Runnable)}, which still fires after the
- * advance. Everything runs on the main thread: a wait ends in the controller's scheduled task, a shrink's completion arrives
- * from the border's animation task, and everything else happens inside the calling method. {@link NextBorderIndicator} can
- * preview the current target.
+ * Constructing one registers it on the border, displacing and stopping any controller registered there before it, so
+ * {@link GameBorder#remove()} stops it and the border's shrink completion advances it through a slot separate from the host's
+ * {@link GameBorder#onShrinkComplete(Runnable)}, which still fires after the advance. Everything runs on the main thread: a wait
+ * ends in the controller's scheduled task, a shrink's completion arrives from the border's animation task, and everything else
+ * happens inside the calling method. {@link NextBorderIndicator} can preview the current target.
  */
 public class BorderPhaseController {
 
@@ -78,10 +78,12 @@ public class BorderPhaseController {
      * handed to selectors through {@link ShrinkContext} and the target of {@link ShrinkTargetSelector#FIXED_CENTER}.
      * initialRadius is the radius phase 1 shrinks from and the one a resync returns the border to before phase 1, so it should be
      * what the border is spawned at, a mismatch being only logged by {@link #start(int)}, and only while the border is active.
-     * plugin owns the wait task. The
-     * controller registers itself on the border at once, replacing any earlier controller's registration, so it may be built
-     * before or after {@link GameBorder#spawn(double)}, but {@link #start(int)} belongs after the spawn. The selector defaults to
-     * {@link ShrinkTargetSelector#RANDOM_INSIDE} with an unseeded random. Nothing runs until start.
+     * plugin owns the wait task. The controller registers itself on the border at once, so it may be built before or after
+     * {@link GameBorder#spawn(double)}, though {@link #start(int)} belongs after the spawn. Any controller already registered
+     * there is stopped as {@link #stop()} describes, so neither its pending wait nor its in-flight shrink keeps driving a border
+     * it no longer owns; the border's shrink completion then advances only this controller, so the displaced one is not to be
+     * started again. The selector defaults to {@link ShrinkTargetSelector#RANDOM_INSIDE} with an unseeded random. Nothing runs
+     * until start.
      */
     public BorderPhaseController(
         Plugin plugin,
@@ -96,8 +98,15 @@ public class BorderPhaseController {
         this.mapCenterX = mapCenterX;
         this.mapCenterZ = mapCenterZ;
         this.initialRadius = initialRadius;
+        // A controller already driving this border is stopped first, so its wait task cannot keep moving a border it no longer owns.
+        if (border.controller != null && border.controller != this) border.controller.stop();
         border.controller = this;
         border.internalShrinkComplete = this::advancePhase;
+    }
+
+    /** The border this controller drives. */
+    public GameBorder border() {
+        return border;
     }
 
     /**
@@ -136,10 +145,10 @@ public class BorderPhaseController {
      * is snapshotted as the circle phase 1 shrinks from, together with the constructor's initialRadius, and while the border is
      * active a live radius that differs from initialRadius is logged as a warning, since the clamp uses initialRadius regardless.
      * Calling it again, including after {@link #stop()}, restarts from phase 1 with fresh targets and an unpaused state, cancelling
-     * the previous run's pending wait but not moving the border back, so phase 1 then shrinks from wherever the border now sits.
-     * A restart while a shrink from the previous run is still in flight should go through {@link #stop()} first, since that
-     * shrink's completion would otherwise advance the new run. An empty schedule completes at once, firing the all-phases
-     * callback. A gameDuration shorter than the schedule is allowed, later boundaries simply falling below zero.
+     * the previous run's pending wait and freezing any transition still in flight, the previous run's shrink included, where it is
+     * without firing its completion, but not moving the border back, so phase 1 then shrinks from wherever the border now sits. An
+     * empty schedule completes at once, firing the all-phases callback. A gameDuration shorter than the schedule is allowed, later
+     * boundaries simply falling below zero.
      */
     public void start(int gameDuration) {
         this.gameDuration = gameDuration;
@@ -148,6 +157,8 @@ public class BorderPhaseController {
         currentPhase = -1;
         subPhase = null;
         paused = false;
+        // A shrink still in flight from a previous run would land and advance the new one - freeze it where it is first.
+        border.animator.reset();
         startCenterX = border.getCenterX();
         startCenterZ = border.getCenterZ();
         if (border.isActive() && border.getRadius() != initialRadius) {
@@ -163,8 +174,8 @@ public class BorderPhaseController {
      * where it is rather than landing on a target the controller no longer owns, and neither the shrink-completion hook nor
      * {@link #syncToGameTimer(int)} does anything until the next {@link #start(int)}. The damage rate stays at the current
      * phase's, and the phase index, target and shrinking flag keep their last values. Neither the all-phases callback nor
-     * {@link GameBorder#onShrinkComplete(Runnable)} fires for the frozen shrink. Called by {@link GameBorder#remove()}. Safe to
-     * repeat.
+     * {@link GameBorder#onShrinkComplete(Runnable)} fires for the frozen shrink. Called by {@link GameBorder#remove()} and by the
+     * constructor of a controller that replaces this one on the same border. Safe to repeat.
      */
     public void stop() {
         stopped = true;

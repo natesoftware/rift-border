@@ -13,7 +13,8 @@ import org.bukkit.NamespacedKey;
  * <p>
  * {@link #wallItemModel()}, {@link #warningTitle()}, {@link #enterSoundKey()} and {@link #enterLongSoundKey()} are read during
  * {@link GameBorder#spawn(double)} and held until {@link GameBorder#remove()}; a re-spawn reads them again. {@link #particleColor()}
- * is read on every particle pass while the radius is above 0. The event hooks run on the main thread: the tracker hooks from the
+ * is read on every particle pass while the radius is above 0, and {@link #indicatorColor()} on every pulse of a running
+ * {@link NextBorderIndicator} that has a ring to draw. The event hooks run on the main thread: the tracker hooks from the
  * border's tick task, or from {@link GameBorder#remove()} for {@link #onWarningCleared(UUID)}, and the phase hooks from the
  * controller's wait task, from the border's animation task when a shrink lands, or synchronously inside the
  * {@link BorderPhaseController#start(int)} or {@link BorderPhaseController#syncToGameTimer(int)} call that triggers them.
@@ -66,8 +67,8 @@ public interface BorderCallbacks {
     /**
      * Called when a player who was outside stops being tracked: they step back inside, switch to creative or spectator, leave the
      * world or server, drop out of the participant set, or the border is removed while they are still outside. For a player still
-     * online the long-outside sound is stopped alongside it if it has played, and the title is cleared, except that stepping back
-     * inside and removal skip the clear when no warning title is configured. Does nothing by default.
+     * online the long-outside sound is stopped alongside it if it has played, and the title is cleared when a warning title is
+     * configured, every path skipping the clear when none is. Does nothing by default.
      */
     default void onWarningCleared(UUID player) {}
 
@@ -107,6 +108,15 @@ public interface BorderCallbacks {
      * 40 ticks, so the colour may change while the border is live. Defaults to white.
      */
     default Color particleColor() {
+        return Color.WHITE;
+    }
+
+    /**
+     * Dust colour of the {@link NextBorderIndicator} ring previewing where the current phase's shrink will land. Read on every
+     * pulse that has a ring to draw, every 40 ticks, so the colour may change while the indicator runs; a null answer draws
+     * white. Defaults to white.
+     */
+    default Color indicatorColor() {
         return Color.WHITE;
     }
 }

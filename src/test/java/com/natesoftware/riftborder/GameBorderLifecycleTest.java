@@ -2,6 +2,7 @@ package com.natesoftware.riftborder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -165,5 +166,147 @@ class GameBorderLifecycleTest {
         assertEquals(100, border.getRadius(), EPS);
         assertEquals(0, scheduler.pending());
         assertFalse(border.isActive());
+    }
+
+    // The indicator's 40-tick pulse builds Particle.DustOptions, which needs a live registry, so nothing below advances the
+    // clock while one is running. Registration and task counts are all these tests need.
+    private BorderPhaseController attachController() {
+        return new BorderPhaseController(plugin, border, List.of(new BorderPhase(1, 1, 50, 0)), 10, -20, 100);
+    }
+
+    @Test
+    void constructingAnIndicatorRegistersItOnTheControllersBorderWithoutStartingAnything() {
+        border.spawn(100);
+        BorderPhaseController controller = attachController();
+        NextBorderIndicator indicator = new NextBorderIndicator(controller);
+        assertSame(indicator, border.indicator);
+        assertEquals(2, scheduler.pending(), "construction schedules nothing, only start() does");
+    }
+
+    @Test
+    void removeStopsAnAttachedIndicator() {
+        border.spawn(100);
+        NextBorderIndicator indicator = new NextBorderIndicator(attachController());
+        assertEquals(2, scheduler.pending(), "particle and damage");
+        indicator.start();
+        assertEquals(3, scheduler.pending(), "start() adds exactly the pulse task");
+
+        border.remove();
+        assertEquals(0, scheduler.pending(), "remove() cancels the pulse along with its own two tasks");
+    }
+
+    @Test
+    void removeOnANeverSpawnedBorderStillStopsItsIndicator() {
+        NextBorderIndicator indicator = new NextBorderIndicator(attachController());
+        indicator.start();
+        assertEquals(1, scheduler.pending(), "only the pulse task, the border itself started nothing");
+        border.remove();
+        assertEquals(0, scheduler.pending());
+        assertFalse(border.isActive());
+    }
+
+    @Test
+    void removeStopsARunningControllerAndItsIndicatorTogether() {
+        border.spawn(100);
+        BorderPhaseController controller = attachController();
+        NextBorderIndicator indicator = new NextBorderIndicator(controller);
+        controller.start(60);
+        assertEquals(3, scheduler.pending(), "particle, damage and the phase wait");
+        indicator.start();
+        assertEquals(4, scheduler.pending(), "plus the pulse");
+
+        border.remove();
+        assertEquals(0, scheduler.pending());
+        assertEquals(0, controller.getCurrentPhase(), "stop() leaves the phase index where it was");
+        assertEquals(100, border.getRadius(), EPS);
+    }
+
+    @Test
+    void constructingASecondIndicatorOnTheSameControllerStopsTheFirst() {
+        border.spawn(100);
+        BorderPhaseController controller = attachController();
+        NextBorderIndicator first = new NextBorderIndicator(controller);
+        first.start();
+        assertEquals(3, scheduler.pending());
+
+        NextBorderIndicator second = new NextBorderIndicator(controller);
+        assertEquals(2, scheduler.pending(), "construction alone stops the indicator it replaces");
+        assertSame(second, border.indicator);
+        second.start();
+        assertEquals(3, scheduler.pending());
+
+        border.remove();
+        assertEquals(0, scheduler.pending(), "remove() stops the replacement");
+    }
+
+    // Registration is a single slot: the border only ever stops the indicator registered last. A replaced indicator started
+    // again by hand runs untracked, so remove() leaves it pulsing and only its own stop() ends it. Current behaviour, documented.
+    @Test
+    void aReplacedIndicatorRestartedByHandOutlivesRemove() {
+        border.spawn(100);
+        BorderPhaseController controller = attachController();
+        NextBorderIndicator first = new NextBorderIndicator(controller);
+        NextBorderIndicator second = new NextBorderIndicator(controller);
+        second.start();
+        first.start();
+        assertEquals(4, scheduler.pending());
+
+        border.remove();
+        assertEquals(1, scheduler.pending(), "the orphaned first indicator's pulse survives remove()");
+        first.stop();
+        assertEquals(0, scheduler.pending());
+    }
+
+    @Test
+    void theThreeArgConstructorRegistersTheSameWayAndSchedulesOnTheBordersPlugin() {
+        border.spawn(100);
+        BorderPhaseController controller = attachController();
+        NextBorderIndicator first = new NextBorderIndicator(controller);
+        first.start();
+        assertEquals(3, scheduler.pending());
+
+        // A foreign plugin and world are accepted for source compatibility but ignored: the task lands on the border's scheduler.
+        TestMocks.FakeScheduler other = new TestMocks.FakeScheduler();
+        NextBorderIndicator indicator = new NextBorderIndicator(TestMocks.plugin(other), TestMocks.world(), controller);
+        assertSame(indicator, border.indicator);
+        assertEquals(2, scheduler.pending(), "the 3-arg constructor replaces and stops the 1-arg indicator too");
+        indicator.start();
+        assertEquals(3, scheduler.pending());
+        assertEquals(0, other.pending());
+
+        border.remove();
+        assertEquals(0, scheduler.pending());
+        assertEquals(0, other.pending());
+    }
+
+    @Test
+    void stopIsSafeBeforeStartAndWhenRepeated() {
+        border.spawn(100);
+        NextBorderIndicator indicator = new NextBorderIndicator(attachController());
+        indicator.stop();
+        assertEquals(2, scheduler.pending(), "stop() before start() touches nothing");
+
+        indicator.start();
+        assertEquals(3, scheduler.pending());
+        indicator.stop();
+        assertEquals(2, scheduler.pending());
+        indicator.stop();
+        assertEquals(2, scheduler.pending(), "a second stop() is a no-op");
+
+        indicator.start();
+        assertEquals(3, scheduler.pending(), "an indicator can be started again after stop()");
+        border.remove();
+        assertEquals(0, scheduler.pending());
+    }
+
+    @Test
+    void startWhileRunningRestartsThePulseWithoutStackingTasks() {
+        border.spawn(100);
+        NextBorderIndicator indicator = new NextBorderIndicator(attachController());
+        indicator.start();
+        indicator.start();
+        assertEquals(3, scheduler.pending(), "the second start() replaces the first task rather than adding one");
+        border.remove();
+        assertEquals(0, scheduler.pending());
     }
 }

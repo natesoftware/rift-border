@@ -98,6 +98,28 @@ class BorderDamageTrackerTest {
         return location;
     }
 
+    // Tears the setUp border down and spawns a second one on the same world whose callbacks leave warningTitle() at its null default,
+    // so exactly one tracker scans the player and it holds no title of its own to clear.
+    private GameBorder spawnBorderWithoutWarningTitle() {
+        border.remove();
+        GameBorder bare = new GameBorder(border.plugin, world, 0, 64, 0).withCallbacks(new BorderCallbacks() {
+            @Override
+            public void onWarningShown(UUID uuid) {
+                shown.add(uuid);
+            }
+
+            @Override
+            public void onWarningCleared(UUID uuid) {
+                cleared.add(uuid);
+            }
+        });
+        bare.setDamagePerSecond(0);
+        bare.damageTracker.clock = () -> clockMs[0];
+        bare.spawn(100);
+        bare.particleRenderer.stop();
+        return bare;
+    }
+
     @Test
     void theFirstTickOutsideWarnsOnceAndTheTitleOnlyRepeatsOnTheDamageCheck() {
         Location outside = moveTo(150, 64, 0);
@@ -298,5 +320,67 @@ class BorderDamageTrackerTest {
         moveTo(10, 50, 10);
         scheduler.advance(1);
         assertEquals(List.of(ID), cleared);
+    }
+
+    @Test
+    void withNoWarningTitleAParticipantDropoutIsPurgedWithoutClearingTheTitle() {
+        GameBorder bare = spawnBorderWithoutWarningTitle();
+        participants = Set.of(ID);
+        bare.withParticipants(() -> participants);
+        moveTo(150, 64, 0);
+        scheduler.advance(1);
+        assertEquals(List.of(ID), shown);
+        verify(player).playSound(any(Location.class), eq(ENTER_SOUND), eq(SoundCategory.MASTER), eq(0.5f), eq(1.0f));
+        verify(player, never()).showTitle(any(Title.class));
+
+        participants = Set.of();
+        scheduler.advance(1);
+        assertEquals(List.of(ID), cleared);
+        verify(player, never()).clearTitle();
+        verify(player, never()).stopSound(anyString(), any(SoundCategory.class));
+
+        // purged and filtered out from then on, so a later scan neither re-warns nor clears again
+        scheduler.advance(20);
+        assertEquals(List.of(ID), shown);
+        assertEquals(List.of(ID), cleared);
+        verify(player, never()).clearTitle();
+    }
+
+    @Test
+    void withNoWarningTitleAnOfflinePlayerIsPurgedWithoutClearingTheTitle() {
+        spawnBorderWithoutWarningTitle();
+        moveTo(150, 64, 0);
+        scheduler.advance(1);
+        assertEquals(List.of(ID), shown);
+        verify(player, never()).showTitle(any(Title.class));
+
+        when(player.isOnline()).thenReturn(false);
+        when(world.getPlayers()).thenReturn(List.of());
+        scheduler.advance(1);
+        assertEquals(List.of(ID), cleared);
+        verify(player, never()).clearTitle();
+        verify(player, never()).stopSound(anyString(), any(SoundCategory.class));
+    }
+
+    @Test
+    void withAWarningTitleAParticipantDropoutClearsTheTitleExactlyOnce() {
+        participants = Set.of(ID);
+        border.withParticipants(() -> participants);
+        moveTo(150, 64, 0);
+        scheduler.advance(1);
+        assertEquals(List.of(ID), shown);
+        verify(player).showTitle(any(Title.class));
+
+        participants = Set.of();
+        scheduler.advance(1);
+        assertEquals(List.of(ID), cleared);
+        verify(player, times(1)).clearTitle();
+
+        // the title was cleared on the purge tick alone - the player is no longer tracked, so later scans leave their screen alone
+        scheduler.advance(20);
+        assertEquals(List.of(ID), shown);
+        assertEquals(List.of(ID), cleared);
+        verify(player, times(1)).clearTitle();
+        verify(player).showTitle(any(Title.class));
     }
 }

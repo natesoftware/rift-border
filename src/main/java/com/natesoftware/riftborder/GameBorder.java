@@ -81,6 +81,8 @@ public class GameBorder {
     BorderCallbacks callbacks;
     // Registered by BorderPhaseController so remove() stops phase progression - teardown order stops being load-bearing on the caller.
     BorderPhaseController controller;
+    // Registered by NextBorderIndicator for the same reason.
+    NextBorderIndicator indicator;
     Function<UUID, BorderRenderMode> renderModeResolver = uuid -> BorderRenderMode.SHADER;
 
     final BorderRenderer renderer;
@@ -135,7 +137,7 @@ public class GameBorder {
      * {@link BorderPhaseController} has already advanced to its next phase through a separate slot, so a hook that reads
      * controller state sees the new phase. It does not fire when the border is removed mid-transition, when a new
      * {@link #moveTo(double, double, double, int)} or {@link #setPosition(double, double, double)} replaces the transition, or
-     * when the controller stops. Returns this for chaining.
+     * when the controller stops or restarts. Returns this for chaining.
      */
     public GameBorder onShrinkComplete(Runnable callback) {
         this.onShrinkComplete = callback;
@@ -347,14 +349,17 @@ public class GameBorder {
 
     /**
      * Tears the border down: stops an attached {@link BorderPhaseController} first, so its pending wait is cancelled and an
-     * in-flight shrink freezes where it is, then cancels any transition of its own without firing
+     * in-flight shrink freezes where it is, stops an attached {@link NextBorderIndicator}, which then needs its own
+     * {@link NextBorderIndicator#start()} to pulse again, then cancels any transition of its own without firing
      * {@link #onShrinkComplete(Runnable)}, marks the border inactive, removes the wall entities and releases their force-loaded
      * chunks, stops the particle wall, and stops the damage tracker, which calls {@link BorderCallbacks#onWarningCleared(UUID)}
      * for everyone still outside, clears their warning title when one is configured, and stops the long-outside sound for those
-     * it had played to. The shape is left as it was. Safe to call when not active, and the border can be spawned again after.
+     * it had played to. The shape is left as it was, and so are both registrations. Safe to call when not active, and the border
+     * can be spawned again after.
      */
     public void remove() {
         if (controller != null) controller.stop();
+        if (indicator != null) indicator.stop();
         animator.reset();
         active = false;
         renderer.remove();
@@ -424,7 +429,8 @@ public class GameBorder {
      * budget of remainingTicks, so the remaining distance is covered in exactly that time whatever fraction was done before. A
      * budget of 0 or less is treated as 1 tick. Completion fires as for {@link #moveTo(double, double, double, int)}. Does nothing
      * when no transition is in progress: before any has started, after one has landed, or since the last
-     * {@link #setPosition(double, double, double)}, {@link #remove()} or {@link BorderPhaseController#stop()}.
+     * {@link #setPosition(double, double, double)}, {@link #remove()}, {@link BorderPhaseController#stop()} or
+     * {@link BorderPhaseController#start(int)}.
      */
     public void resumeShrinking(int remainingTicks) {
         animator.resume(remainingTicks);
