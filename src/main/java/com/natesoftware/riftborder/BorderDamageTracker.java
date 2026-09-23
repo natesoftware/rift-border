@@ -126,7 +126,7 @@ final class BorderDamageTracker {
         Location loc = Objects.requireNonNull(player.getLocation());
         boolean outsideRadius = border.isOutside(loc.getX(), loc.getZ());
 
-        // Subtle visual cue: scatter red dust on the ceiling or floor plane when the player is inside the radius and within the indicator range of...
+        // Subtle visual cue: red dust on the ceiling or floor plane when the player is inside the radius and near that plane.
         // Pulsed on the shared particle cadence instead of spawning every tick.
         // Shown in every gamemode - only warnings and damage below are survival-only.
         if (showIndicator && !outsideRadius) {

@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border:v2.1.0")
+    compileOnly("com.github.natesoftware:rift-border:v2.2.0")
 }
 ```
 
@@ -58,7 +58,7 @@ at all; a bundled copy would be cut off from it and show everyone particles.
 
 Package `com.natesoftware.riftborder`. To build against local changes instead,
 clone this repo beside your plugin, add `includeBuild("../rift-border")` to
-`settings.gradle.kts`, and use `compileOnly("com.natesoftware:rift-border:2.1.0")`.
+`settings.gradle.kts`, and use `compileOnly("com.natesoftware:rift-border:2.2.0")`.
 
 ## Usage
 
@@ -189,6 +189,7 @@ What players get out of the box:
 | Sound on crossing out | `minecraft:block.anvil.land` |
 | Sound while still outside | `minecraft:entity.wither.spawn`, every 5 s |
 | Wall colour, both render modes | aqua `#55FFFF` (`wallColor()`) |
+| Colour while shrinking or moving | the wall colour (`shrinkColor()` returns null) |
 | Creative / spectator | ignored |
 
 Border damage writes health directly. Non-lethal ticks fire no
@@ -211,8 +212,10 @@ Players see one of two walls:
 **You configure nothing.** The RiftBorder plugin decides per player: anyone
 whose client loaded the pack sees the shader wall, anyone who declined it or
 chose `/border particle` sees particles. Both walls take their colour from
-`wallColor()` on your callbacks (aqua `#55FFFF` by default). The particle wall
-picks up a change within two seconds; the shader wall reads it at spawn.
+`wallColor()` on your callbacks (aqua `#55FFFF` by default), and both follow a
+change within two seconds while the border is live. Return a `shrinkColor()` as
+well and the wall switches to it while the border is moving, and back once it
+lands.
 
 The server owner chooses how the pack reaches players in RiftBorder's
 `config.yml`: served from the server itself, downloaded from a URL, or carried

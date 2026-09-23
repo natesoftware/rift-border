@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.bukkit.Color;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -151,5 +152,48 @@ class BorderShrinkAnimatorTest {
         assertEquals(100, border.getPatternRadius(), EPS);
         scheduler.advance(70);
         assertEquals(100, border.getPatternRadius(), EPS);
+    }
+
+    @Test
+    void theShrinkColourShowsOnlyWhileTheBorderMoves() {
+        Color wall = Color.fromRGB(0x55FFFF);
+        Color shrink = Color.fromRGB(0xFF5555);
+        border.withCallbacks(new BorderCallbacks() {
+            @Override
+            public Color wallColor() {
+                return wall;
+            }
+
+            @Override
+            public Color shrinkColor() {
+                return shrink;
+            }
+        });
+        assertFalse(border.isMoving());
+        assertEquals(wall, border.wallColor());
+
+        border.moveTo(0, 0, 100, 100);
+        assertTrue(border.isMoving());
+        assertEquals(shrink, border.wallColor());
+        scheduler.advance(50);
+        assertEquals(shrink, border.wallColor());
+
+        // paused is not moving, so the wall goes back to its own colour until the shrink resumes
+        border.pauseShrinking();
+        assertFalse(border.isMoving());
+        assertEquals(wall, border.wallColor());
+        border.resumeShrinking(50);
+        assertEquals(shrink, border.wallColor());
+
+        scheduler.advance(50);
+        assertFalse(border.isMoving());
+        assertEquals(wall, border.wallColor());
+    }
+
+    @Test
+    void withoutAShrinkColourTheWallKeepsItsColourWhileMoving() {
+        border.moveTo(0, 0, 100, 100);
+        assertTrue(border.isMoving());
+        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, border.wallColor());
     }
 }

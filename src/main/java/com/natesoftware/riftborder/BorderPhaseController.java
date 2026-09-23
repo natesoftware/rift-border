@@ -50,7 +50,8 @@ public class BorderPhaseController {
     private double startCenterX;
     private double startCenterZ;
 
-    // Target centre per phase, resolved lazily in order as each phase is entered so selectors see live state and each circle nests in the last.
+    // Target centre per phase, resolved lazily in order as each phase is entered, so selectors see live state and each circle
+    // nests in the last.
     private final List<BorderPoint> phaseTargets = new ArrayList<>();
 
     // Absolute game-timer boundaries for each phase in seconds remaining.
@@ -359,7 +360,7 @@ public class BorderPhaseController {
      */
     public int getSubPhaseRemaining() {
         if (currentPhase < 0 || currentPhase >= phases.size() || subPhase == null) return 0;
-        // Ceiling division so the displayed second stays at N for the full first second, matching CountdownTimer's once-per-second decrement.
+        // Ceiling division so the displayed second stays at N for the full first second, matching a once-per-second game timer.
         // Floor was off-by-one: at elapsed = 1 tick, floor((1200 - 1) / 20) = 59 immediately, putting this 1s behind the game timer.
         if (paused) return Math.max(0, (pausedRemainingTicks + 19) / 20);
         int elapsed = (int) (currentTick() - subPhaseStartTick);

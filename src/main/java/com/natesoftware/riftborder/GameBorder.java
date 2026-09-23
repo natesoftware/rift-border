@@ -247,9 +247,15 @@ public class GameBorder {
         return List.copyOf(ACTIVE);
     }
 
-    // The callbacks' wall colour, or the default for a null answer - the one colour both render modes draw.
+    // The colour both render modes draw right now: the shrink colour while moving if the host set one, else the wall colour,
+    // else the default.
     Color wallColor() {
-        Color color = callbacks != null ? callbacks.wallColor() : null;
+        if (callbacks == null) return BorderCallbacks.DEFAULT_WALL_COLOR;
+        if (animator.isMoving()) {
+            Color shrink = callbacks.shrinkColor();
+            if (shrink != null) return shrink;
+        }
+        Color color = callbacks.wallColor();
         return color != null ? color : BorderCallbacks.DEFAULT_WALL_COLOR;
     }
 
@@ -267,6 +273,14 @@ public class GameBorder {
     /** Returns true from the moment {@link #spawn(double)} succeeds until {@link #remove()} runs, and false before and after. */
     public boolean isActive() {
         return active;
+    }
+
+    /**
+     * Returns true while a shrink, grow or move is in flight and not paused, which is when the wall shows
+     * {@link BorderCallbacks#shrinkColor()}. False while waiting, paused, or after the transition lands.
+     */
+    public boolean isMoving() {
+        return animator.isMoving();
     }
 
     /**
@@ -386,7 +400,7 @@ public class GameBorder {
         if (callbacks == null) {
             throw new IllegalStateException("GameBorder.withCallbacks(...) must be called before spawn()");
         }
-        // Reset the whole shape, not just the radius - a border re-spawned after remove() would otherwise keep the last phase's centre and ceiling.
+        // Reset the whole shape, not just the radius - a border re-spawned after remove() would otherwise keep the last phase's shape.
         this.radius = initialRadius;
         this.centerX = initialCenterX;
         this.centerZ = initialCenterZ;

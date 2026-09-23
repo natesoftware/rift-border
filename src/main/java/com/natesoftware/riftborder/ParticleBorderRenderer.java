@@ -85,9 +85,11 @@ final class ParticleBorderRenderer {
 
         int sent = 0;
         for (int off = 0; off <= totalColumns / 2 && sent < MAX_PARTICLES_PER_PASS; off++) {
-            sent += spawnColumn(player, cx, cz, radius, (centerColumn + off) * angleStep, yStart, yMax, spacing, dust, MAX_PARTICLES_PER_PASS - sent);
+            sent += spawnColumn(player, cx, cz, radius, (centerColumn + off) * angleStep, yStart, yMax, spacing, dust,
+                MAX_PARTICLES_PER_PASS - sent);
             if (off > 0 && off * 2 < totalColumns && sent < MAX_PARTICLES_PER_PASS) {
-                sent += spawnColumn(player, cx, cz, radius, (centerColumn - off) * angleStep, yStart, yMax, spacing, dust, MAX_PARTICLES_PER_PASS - sent);
+                sent += spawnColumn(player, cx, cz, radius, (centerColumn - off) * angleStep, yStart, yMax, spacing, dust,
+                    MAX_PARTICLES_PER_PASS - sent);
             }
         }
     }

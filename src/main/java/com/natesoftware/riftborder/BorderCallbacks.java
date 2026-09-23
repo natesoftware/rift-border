@@ -12,7 +12,8 @@ import org.bukkit.Color;
  * <p>
  * {@link #warningTitle()}, {@link #enterSoundKey()} and {@link #enterLongSoundKey()} are read during
  * {@link GameBorder#spawn(double)} and held until {@link GameBorder#remove()}; a re-spawn reads them again. {@link #wallColor()}
- * is read at spawn for the shader wall and on every particle pass while the radius is above 0 for the particle wall, and
+ * and {@link #shrinkColor()} are read every tick of a transition and every 10 ticks otherwise by the shader wall, and on every
+ * particle pass while the radius is above 0 by the particle wall, and
  * {@link #indicatorColor()} on every pulse of a running
  * {@link NextBorderIndicator} that has a ring to draw. The event hooks run on the main thread: the tracker hooks from the
  * border's tick task, or from {@link GameBorder#remove()} for {@link #onWarningCleared(UUID)}, and the phase hooks from the
@@ -98,12 +99,23 @@ public interface BorderCallbacks {
 
     /**
      * Colour of the border wall in both render modes: the dust of the particle wall, and the tint of the shader wall, whose
-     * display items carry it as their dyed colour for the pack to tint from. The particle wall reads it on every pass, every 40
-     * ticks, so a change shows within two seconds, while the shader wall reads it once at {@link GameBorder#spawn(double)}, so a
-     * change reaches the shader wall on the next spawn. A null answer draws {@link #DEFAULT_WALL_COLOR}, which is also the default.
+     * display items carry it as their dyed colour for the pack to tint from. Both follow a change while the border is live: the
+     * shader wall checks every 10 ticks and re-dyes its displays when the answer differs, the particle wall reads it on every
+     * pass, every 40 ticks. Return a stored value rather than building one per call. A null answer draws
+     * {@link #DEFAULT_WALL_COLOR}, which is also the default.
      */
     default Color wallColor() {
         return DEFAULT_WALL_COLOR;
+    }
+
+    /**
+     * Colour the wall switches to while the border is moving - shrinking, growing or re-centring, from
+     * {@link GameBorder#moveTo(double, double, double, int)} or a {@link BorderPhaseController} shrink - and back from once it
+     * lands or pauses. The shader wall switches on the first tick of the move and back within 10 ticks of it ending; the
+     * particle wall on its next pass, every 40 ticks. Null keeps {@link #wallColor()} throughout, which is the default.
+     */
+    default Color shrinkColor() {
+        return null;
     }
 
     /**

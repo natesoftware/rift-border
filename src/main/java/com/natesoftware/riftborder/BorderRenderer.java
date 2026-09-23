@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.datacomponent.item.DyedItemColor;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -60,9 +61,11 @@ final class BorderRenderer {
     private final Map<UUID, ItemDisplay> shownByPlayer = new HashMap<>();
 
     private ItemStack borderItem;
+    // The colour the displays are currently dyed, so a change to the host's wallColor() can be spotted and re-applied.
+    private Color bakedColor;
     private BukkitTask maintenanceTask;
     private BukkitTask visibilityTask;
-    // Flipped by remove() so async chunk-load callbacks from spawnGridEntities that resolve after teardown don't spawn orphan entities or leak...
+    // Flipped by remove() so chunk-load callbacks that resolve after teardown spawn no orphan entities and pin no chunks.
     private volatile boolean disposed;
 
     BorderRenderer(GameBorder border) {
@@ -76,7 +79,8 @@ final class BorderRenderer {
         borderItem = new ItemStack(Material.PAPER);
         borderItem.editMeta(m -> m.setItemModel(WALL_MODEL));
         // set after editMeta so no later meta write drops it - the pack tints from this and the shader colours the wall from the tint
-        borderItem.setData(DataComponentTypes.DYED_COLOR, DyedItemColor.dyedItemColor(border.wallColor()));
+        bakedColor = border.wallColor();
+        borderItem.setData(DataComponentTypes.DYED_COLOR, DyedItemColor.dyedItemColor(bakedColor));
 
         if (Math.ceil(border.getRadius()) + border.gridSpacing > border.gridMaxExtent) {
             log.warn("[GameBorder] Radius {} exceeds the anchor grid cap of {} - the wall will not render beyond it. "
@@ -89,7 +93,8 @@ final class BorderRenderer {
         startMaintenanceTask();
         startVisibilityTask();
 
-        log.info("[GameBorder] Border active - spawning an anchor grid of +/-{} blocks at {}-block spacing", gridExtent(), border.gridSpacing);
+        log.info("[GameBorder] Border active - spawning an anchor grid of +/-{} blocks at {}-block spacing",
+            gridExtent(), border.gridSpacing);
     }
 
     void remove() {
@@ -109,6 +114,8 @@ final class BorderRenderer {
     }
 
     void updateAllEntities() {
+        // runs every tick of a transition, so a shrink colour takes over on the first tick rather than at the next pass
+        syncColor();
         float rf = (float) border.getRadius();
         float pf = (float) border.getPatternRadius();
         for (ItemDisplay entity : gridEntities.values()) {
@@ -243,8 +250,22 @@ final class BorderRenderer {
                 border.plugin, this::updateVisibility, VISIBILITY_INTERVAL_TICKS, VISIBILITY_INTERVAL_TICKS);
     }
 
+    // Re-dyes the wall when the colour it should show changes - the host's wallColor(), or its shrinkColor() while moving.
+    // Anchors spawned later clone borderItem, so updating it covers them too. A no-op until spawn builds the item.
+    void syncColor() {
+        if (borderItem == null) return;
+        Color now = border.wallColor();
+        if (now.equals(bakedColor)) return;
+        bakedColor = now;
+        borderItem.setData(DataComponentTypes.DYED_COLOR, DyedItemColor.dyedItemColor(now));
+        for (ItemDisplay entity : gridEntities.values()) {
+            if (!entity.isDead()) entity.setItemStack(borderItem.clone());
+        }
+    }
+
     // Distance check is XZ-only - the shader renders the full cylinder regardless of the entity's vertical position.
     private void updateVisibility() {
+        syncColor();
         Collection<ItemDisplay> all = gridEntities.values();
         if (all.isEmpty()) return;
 

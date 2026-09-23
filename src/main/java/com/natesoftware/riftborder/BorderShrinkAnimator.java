@@ -103,6 +103,11 @@ final class BorderShrinkAnimator {
         return task != null ? endSize : Double.NaN;
     }
 
+    // True while a transition is in flight and not paused - the border is visibly moving.
+    boolean isMoving() {
+        return task != null && !paused;
+    }
+
     private void applyProgress() {
         double progress = Math.min(1.0, (double) elapsedTicks / totalTicks);
         double radius = startSize + (endSize - startSize) * progress;
@@ -124,7 +129,7 @@ final class BorderShrinkAnimator {
         return effStart + (effEnd - effStart) * progress;
     }
 
-    // Mirror of computeHeight for the floor: substitutes NO_MIN_HEIGHT with the world's min build height so the floor visibly rises from below.
+    // Mirror of computeHeight for the floor: the world's min build height stands in for NO_MIN_HEIGHT, so the floor rises from below.
     private double computeMinHeight(double progress) {
         if (progress >= 1.0) return endMinHeight;
         if (startMinHeight == endMinHeight) return endMinHeight;
