@@ -16,7 +16,7 @@ import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 // Mockito stand-ins for the slice of Bukkit the library touches, plus a scheduler tests advance by hand one tick at a time.
-// No server runs: anything that needs a live registry (ItemStack, Material, Particle) is out of reach, so keep wallItemModel() null.
+// No server runs: anything that needs a live registry (ItemStack, Material, Particle) is out of reach, so never withShaderWall().
 final class TestMocks {
 
     private TestMocks() {}

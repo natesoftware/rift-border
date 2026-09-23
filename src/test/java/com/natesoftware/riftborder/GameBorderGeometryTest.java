@@ -2,11 +2,13 @@ package com.natesoftware.riftborder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import org.bukkit.Color;
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,5 +83,40 @@ class GameBorderGeometryTest {
         GameBorder a = new GameBorder(plugin, world, 0, 64, 0);
         GameBorder b = new GameBorder(plugin, world, 0, 64, 0);
         assertFalse(a.id.equals(b.id));
+    }
+
+    @Test
+    void theShaderWallIsOffUntilDeclaredAndTheBuilderChains() {
+        GameBorder border = new GameBorder(plugin, world, 0, 64, 0);
+        assertFalse(border.shaderWall);
+        assertSame(border, border.withShaderWall());
+        assertTrue(border.shaderWall);
+    }
+
+    @Test
+    void theWallColourDefaultsToThePackAquaForBothRenderModes() {
+        assertEquals(Color.fromRGB(0x55, 0xFF, 0xFF), BorderCallbacks.DEFAULT_WALL_COLOR);
+        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, new BorderCallbacks() {}.wallColor());
+        // no callbacks yet still resolves to the default rather than failing
+        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, new GameBorder(plugin, world, 0, 64, 0).wallColor());
+    }
+
+    @Test
+    void aCustomWallColourPassesThroughAndANullAnswerFallsBackToTheDefault() {
+        GameBorder border = new GameBorder(plugin, world, 0, 64, 0).withCallbacks(new BorderCallbacks() {
+            @Override
+            public Color wallColor() {
+                return Color.RED;
+            }
+        });
+        assertEquals(Color.RED, border.wallColor());
+
+        border.withCallbacks(new BorderCallbacks() {
+            @Override
+            public Color wallColor() {
+                return null;
+            }
+        });
+        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, border.wallColor());
     }
 }

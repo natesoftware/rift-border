@@ -52,15 +52,11 @@ final class ParticleBorderRenderer {
     private void tick() {
         double radius = border.getRadius();
         if (radius <= 0) return;
-        Color color = particleColor();
+        Color color = border.wallColor();
         for (Player player : border.world.getPlayers()) {
             if (border.renderModeFor(player.getUniqueId()) != BorderRenderMode.PARTICLE) continue;
             renderPatchFor(player, radius, color);
         }
-    }
-
-    private Color particleColor() {
-        return border.callbacks != null ? border.callbacks.particleColor() : Color.WHITE;
     }
 
     private void renderPatchFor(Player player, double radius, Color color) {

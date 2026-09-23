@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.DyedItemColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -42,6 +44,9 @@ final class BorderRenderer {
     // so two live borders in one world no longer delete each other's walls. Per-classloader, so bundled copies never share it.
     private static final Set<UUID> LIVE = ConcurrentHashMap.newKeySet();
 
+    // The rift-border pack's wall model. There is one supported pack, so the key belongs to the library, not the host.
+    static final NamespacedKey WALL_MODEL = new NamespacedKey("rift-border", "border");
+
     private final GameBorder border;
 
     // PDC tag for orphan cleanup. The value is the owning border's id.
@@ -69,7 +74,9 @@ final class BorderRenderer {
         // Cleared so a border re-spawned after remove() isn't silently blanked by the async chunk callbacks bailing on a stale flag.
         disposed = false;
         borderItem = new ItemStack(Material.PAPER);
-        borderItem.editMeta(m -> m.setItemModel(border.callbacks.wallItemModel()));
+        borderItem.editMeta(m -> m.setItemModel(WALL_MODEL));
+        // set after editMeta so no later meta write drops it - the pack tints from this and the shader colours the wall from the tint
+        borderItem.setData(DataComponentTypes.DYED_COLOR, DyedItemColor.dyedItemColor(border.wallColor()));
 
         if (Math.ceil(border.getRadius()) + border.gridSpacing > border.gridMaxExtent) {
             log.warn("[GameBorder] Radius {} exceeds the anchor grid cap of {} - the wall will not render beyond it. "

@@ -14,7 +14,7 @@ import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-// Spawn and remove without a resource pack: wallItemModel stays null, so the display grid is skipped and only the particle
+// Spawn and remove without the shader wall: the display grid is skipped and only the particle
 // and damage tasks run. Nothing here reaches a Bukkit registry.
 class GameBorderLifecycleTest {
 
@@ -69,7 +69,7 @@ class GameBorderLifecycleTest {
     }
 
     @Test
-    void withoutAPackEveryPlayerIsParticleModeAndTheResolverIsNeverAsked() {
+    void withoutTheShaderWallEveryPlayerIsParticleModeAndTheResolverIsNeverAsked() {
         AtomicInteger asked = new AtomicInteger();
         border.withRenderModeResolver(uuid -> {
             asked.incrementAndGet();
@@ -77,7 +77,16 @@ class GameBorderLifecycleTest {
         });
         border.spawn(100);
         assertEquals(BorderRenderMode.PARTICLE, border.renderModeFor(UUID.randomUUID()));
-        assertEquals(0, asked.get(), "with no pack the resolver is short-circuited, not consulted");
+        assertEquals(0, asked.get(), "without the shader wall the resolver is short-circuited, not consulted");
+    }
+
+    @Test
+    void optingIntoTheShaderWallAfterSpawnChangesNothingUntilTheNextSpawn() {
+        border.withRenderModeResolver(uuid -> BorderRenderMode.SHADER);
+        border.spawn(100);
+        border.withShaderWall();
+        // no display grid was spawned, so the live border must keep everyone on particles
+        assertEquals(BorderRenderMode.PARTICLE, border.renderModeFor(UUID.randomUUID()));
     }
 
     @Test

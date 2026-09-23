@@ -51,7 +51,7 @@ includeBuild("../rift-border")
 `build.gradle.kts`:
 ```kotlin
 dependencies {
-    implementation("com.natesoftware:rift-border:1.3.0")
+    implementation("com.natesoftware:rift-border:2.0.0")
 }
 ```
 
@@ -72,7 +72,7 @@ repositories {
     mavenLocal()
 }
 dependencies {
-    implementation("com.natesoftware:rift-border:1.3.0")
+    implementation("com.natesoftware:rift-border:2.0.0")
 }
 ```
 
@@ -83,7 +83,7 @@ repositories {
     maven("https://jitpack.io")
 }
 dependencies {
-    implementation("com.github.natesoftware:rift-border:v1.3.0")
+    implementation("com.github.natesoftware:rift-border:v2.0.0")
 }
 ```
 
@@ -243,7 +243,7 @@ What players get out of the box:
 | Warning title | none (`warningTitle()` returns null). When set, it owns the player's title slot while they are outside |
 | Sound on crossing out | `minecraft:block.anvil.land` |
 | Sound while still outside | `minecraft:entity.wither.spawn`, every 5 s |
-| Particle wall colour | white |
+| Wall colour, both render modes | aqua `#55FFFF` (`wallColor()`) |
 | Creative / spectator | ignored |
 
 Border damage writes health directly. Non-lethal ticks fire no
@@ -263,17 +263,21 @@ Each player is resolved to a `BorderRenderMode` on every visibility pass:
 | `PARTICLE` | no | A dust wall on the arc nearest the player, density scaled to the current radius |
 | `SHADER` | yes | A solid cylinder wall, drawn by the pack's item-model |
 
-**With no pack, you get particles and nothing else to configure.** Leave
-`wallItemModel()` alone: it defaults to `null`, which puts every player on
-`PARTICLE`, skips the display grid entirely, and logs one line saying so.
+**With no pack, you get particles and nothing else to configure.** Every
+player is on `PARTICLE`, the display grid is skipped entirely, and spawn logs
+one line saying so.
 
-To offer the shader wall, return a key from `wallItemModel()` and register a
-model under it in your pack. Every player then defaults to `SHADER`; supply a
-resolver to let them choose:
+If your players have the rift-border pack, turn the shader wall on. Every
+player then defaults to `SHADER`; supply a resolver to let them choose:
 
 ```java
-border.withRenderModeResolver(uuid -> preferences.renderMode(uuid));
+border.withShaderWall()
+      .withRenderModeResolver(uuid -> preferences.renderMode(uuid));
 ```
+
+Both walls take their colour from `wallColor()` on your callbacks (aqua
+`#55FFFF` by default). The particle wall picks up a change within two seconds;
+the shader wall reads it at spawn.
 
 Shader mode mounts its wall on an anchor grid: one invisible display every 80
 blocks, out to 500 blocks from the centre. A radius past that cap renders no
@@ -286,9 +290,11 @@ border.withGrid(80, 1200)   // spacing, max extent
 
 ### Pack contract
 
-The wall is a `Material.PAPER` `ItemStack` whose item-model is the key from
-`wallItemModel()`, carried by `ItemDisplay` entities on an 80-block grid. The
-model is expanded into a cylinder by a core-shader override, and the border's
+The wall is a `Material.PAPER` `ItemStack` with the item model
+`rift-border:border`, dyed with the host's `wallColor()`, carried by
+`ItemDisplay` entities on an 80-block grid. The pack's item definition tints
+from that dyed colour, the model is expanded into a cylinder by a core-shader
+override that colours the wall from the tint, and the border's
 geometry reaches the shader through the display's scale: **X and Y carry the
 live radius, Z carries the pattern-anchor radius** (the transition target while
 shrinking, so the pattern does not slide mid-shrink).
@@ -296,7 +302,8 @@ shrinking, so the pattern does not slide mid-shrink).
 The pack that implements this contract is not published. Particle mode is the
 supported path for third parties today; a future plugin release will bundle
 and serve the pack itself. Until then, message `Nateiwnl` on Discord if you
-want it, or write your own against the contract above.
+want it, or write your own against the contract above under the same
+`rift-border:border` key.
 
 ## Example
 

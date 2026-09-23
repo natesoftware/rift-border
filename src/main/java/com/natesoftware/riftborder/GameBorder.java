@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.bukkit.Color;
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 import org.slf4j.Logger;
@@ -18,13 +19,14 @@ import org.slf4j.LoggerFactory;
  * {@link #setPosition(double, double, double)} and the pause and resume methods, or by a {@link BorderPhaseController} that walks
  * it through a schedule of {@link BorderPhase}s and owns the shape while it runs.
  * <p>
- * While active the border renders its wall to every player in the world and tracks the players it applies to. With a resource
- * pack, signalled by a non-null {@link BorderCallbacks#wallItemModel()}, the wall is a shader cylinder mounted on a grid of
- * invisible {@code ItemDisplay} anchors around the construction centre, each player being shown the anchor nearest them, and a
- * per-player resolver may switch individuals to a particle wall instead. Without a pack everyone gets particles. The damage
- * tracker runs every tick from spawn to removal regardless of the damage rate, warning, sounding and hurting anyone outside the
- * radius, above the ceiling or below the floor, with the branding and hooks supplied through {@link BorderCallbacks}. Every task
- * runs on the main thread and every method expects to be called from it.
+ * While active the border renders its wall to every player in the world and tracks the players it applies to. With the
+ * rift-border resource pack, declared with {@link #withShaderWall()}, the wall is a shader cylinder mounted on a grid of invisible
+ * {@code ItemDisplay} anchors around the construction centre, each player being shown the anchor nearest them, and a per-player
+ * resolver may switch individuals to a particle wall instead. Without it everyone gets particles. Both walls take their colour
+ * from {@link BorderCallbacks#wallColor()}. The damage tracker runs every tick from spawn to removal regardless of the damage
+ * rate, warning, sounding and hurting anyone outside the radius, above the ceiling or below the floor, with the branding and
+ * hooks supplied through {@link BorderCallbacks}. Every task runs on the main thread and every method expects to be called from
+ * it.
  */
 public class GameBorder {
 
@@ -92,7 +94,10 @@ public class GameBorder {
 
     private boolean active;
 
-    // Resolved at spawn from callbacks.wallItemModel(). False means there is no pack, so the shader wall has nothing to draw.
+    // Set by withShaderWall(). The server's players have the rift-border pack, so the shader wall has something to draw.
+    boolean shaderWall;
+
+    // Snapshot of shaderWall taken at spawn, so a late withShaderWall() cannot claim a display grid that was never spawned.
     private boolean packConfigured;
 
     /**
@@ -158,11 +163,24 @@ public class GameBorder {
      * Per-player choice between the shader wall and the particle wall, consulted with the player's UUID on every visibility pass,
      * every 10 ticks, and every particle pass, every 40 ticks, so a player can switch mid-game. A null answer means
      * {@link BorderRenderMode#SHADER}, which is also what the default resolver answers for everyone. resolver itself must not be
-     * null. It is never consulted while no pack is configured, since {@link BorderRenderMode#PARTICLE} is then forced for every
-     * player. Returns this for chaining.
+     * null. It is never consulted unless the border was spawned with {@link #withShaderWall()}, since
+     * {@link BorderRenderMode#PARTICLE} is otherwise forced for every player. Returns this for chaining.
      */
     public GameBorder withRenderModeResolver(Function<UUID, BorderRenderMode> resolver) {
         this.renderModeResolver = resolver;
+        return this;
+    }
+
+    /**
+     * Declares that this server's players have the rift-border resource pack, so the wall is drawn as the shader cylinder. Without
+     * it the border renders as particles for everyone, which needs nothing on the client. With it, {@link #spawn(double)} mounts
+     * the display anchor grid, colours it with {@link BorderCallbacks#wallColor()}, and every player defaults to
+     * {@link BorderRenderMode#SHADER}, a resolver from {@link #withRenderModeResolver} still able to switch individuals to
+     * particles. Read at spawn, so on a border already active it takes effect only when the border is spawned again. Returns this
+     * for chaining.
+     */
+    public GameBorder withShaderWall() {
+        this.shaderWall = true;
         return this;
     }
 
@@ -173,7 +191,7 @@ public class GameBorder {
      * full-map grid, and each anchor's chunk is kept force-loaded while the border is active. The wall only renders where an
      * anchor is near enough to track, so a radius past maxExtent silently loses its far side. {@link #spawn(double)} logs a
      * warning whenever the cap truncates the grid, that is when the initial radius plus one spacing exceeds maxExtent, and only
-     * with a pack configured, since without one no grid is spawned. Defaults to 80 and 500. Throws IllegalArgumentException when
+     * with the shader wall on, since without it no grid is spawned. Defaults to 80 and 500. Throws IllegalArgumentException when
      * either value is not positive. Takes effect on the next spawn. Returns this for chaining.
      */
     public GameBorder withGrid(int spacing, int maxExtent) {
@@ -194,11 +212,17 @@ public class GameBorder {
         return this;
     }
 
-    // Render mode for a player, treating a null resolver result as SHADER. Without a pack there is no shader wall, so everyone gets particles.
+    // Render mode for a player, treating a null resolver result as SHADER. Without the shader wall everyone gets particles.
     BorderRenderMode renderModeFor(UUID uuid) {
         if (!packConfigured) return BorderRenderMode.PARTICLE;
         BorderRenderMode mode = renderModeResolver.apply(uuid);
         return mode != null ? mode : BorderRenderMode.SHADER;
+    }
+
+    // The callbacks' wall colour, or the default for a null answer - the one colour both render modes draw.
+    Color wallColor() {
+        Color color = callbacks != null ? callbacks.wallColor() : null;
+        return color != null ? color : BorderCallbacks.DEFAULT_WALL_COLOR;
     }
 
     /**
@@ -308,17 +332,18 @@ public class GameBorder {
 
     /**
      * Activates the border at initialRadius. The centre returns to the one given at construction and the ceiling and floor to
-     * none, so a border spawned again after {@link #remove()} does not keep the last phase's shape. Whether a pack is configured
-     * is then read from {@link BorderCallbacks#wallItemModel()} at spawn and held until removal. A non-null key spawns the anchor
-     * grid around the construction centre, one invisible {@code ItemDisplay} per grid point with its chunk force-loaded, arriving
-     * over the following ticks as chunks load, after sweeping wall entities left behind by a border of this plugin that was never
-     * removed, and starts showing each player their nearest anchor. A null key skips the grid entirely, logs one line, and forces
-     * {@link BorderRenderMode#PARTICLE} for everyone without consulting the resolver. The particle renderer starts either way,
+     * none, so a border spawned again after {@link #remove()} does not keep the last phase's shape. Whether the shader wall is on
+     * is then read from {@link #withShaderWall()} and held until removal. When it is, spawn mounts the anchor grid around the
+     * construction centre, one invisible {@code ItemDisplay} per grid point with its chunk force-loaded, each carrying the pack's
+     * wall model dyed with {@link BorderCallbacks#wallColor()}, arriving over the following ticks as chunks load, after sweeping
+     * wall entities left behind by a border of this plugin that was never removed, and starts showing each player their nearest
+     * anchor. When it is not, spawn skips the grid entirely, logs one line, and forces {@link BorderRenderMode#PARTICLE} for
+     * everyone without consulting the resolver. The particle renderer starts either way,
      * serving players in particle mode every 40 ticks. The damage tracker also always starts, reading the warning title and sound
      * keys from the callbacks once: from then on every tick classifies each participating survival or adventure player as inside
      * or outside, warns, plays the sounds, every 40 ticks pulses red dust on the ceiling or floor plane around participants
      * inside the radius and within 10 blocks of that plane in any game mode, and deals the configured damage every 20 ticks after
-     * a one-second grace, as described on {@link #setDamagePerSecond(double)} and {@link BorderCallbacks}. With a pack configured,
+     * a one-second grace, as described on {@link #setDamagePerSecond(double)} and {@link BorderCallbacks}. With the shader wall on,
      * logs a warning when initialRadius plus one grid spacing exceeds the grid cap, as described on {@link #withGrid(int, int)}.
      * Throws IllegalStateException when already active or when no callbacks have been supplied, changing nothing.
      */
@@ -334,13 +359,13 @@ public class GameBorder {
         this.maxHeight = NO_HEIGHT_LIMIT;
         this.minHeight = NO_MIN_HEIGHT;
         this.active = true;
-        this.packConfigured = callbacks.wallItemModel() != null;
+        this.packConfigured = shaderWall;
 
-        // No item-model key means no resource pack, so the display grid would render nothing - skip it and leave every player on particles.
+        // Without the pack the display grid would render nothing - skip it and leave every player on particles.
         if (packConfigured) {
             renderer.spawn();
         } else {
-            log.info("[GameBorder] No wallItemModel configured - rendering the border as particles for every player");
+            log.info("[GameBorder] Shader wall off - rendering the border as particles for every player (see withShaderWall())");
         }
         particleRenderer.start();
         // Always tracked: the tracker owns the warning title, the enter sounds and the height indicators, not just damage.

@@ -4,16 +4,16 @@ import java.util.UUID;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Color;
-import org.bukkit.NamespacedKey;
 
 /**
  * Branding and presentation hooks that a host plugin supplies when constructing a {@link GameBorder}. Every method has a default,
  * so {@code new BorderCallbacks() {}} is a complete implementation and a host overrides only what it wants to change. Passing one
  * to {@link GameBorder#withCallbacks(BorderCallbacks)} is mandatory before {@link GameBorder#spawn(double)}.
  * <p>
- * {@link #wallItemModel()}, {@link #warningTitle()}, {@link #enterSoundKey()} and {@link #enterLongSoundKey()} are read during
- * {@link GameBorder#spawn(double)} and held until {@link GameBorder#remove()}; a re-spawn reads them again. {@link #particleColor()}
- * is read on every particle pass while the radius is above 0, and {@link #indicatorColor()} on every pulse of a running
+ * {@link #warningTitle()}, {@link #enterSoundKey()} and {@link #enterLongSoundKey()} are read during
+ * {@link GameBorder#spawn(double)} and held until {@link GameBorder#remove()}; a re-spawn reads them again. {@link #wallColor()}
+ * is read at spawn for the shader wall and on every particle pass while the radius is above 0 for the particle wall, and
+ * {@link #indicatorColor()} on every pulse of a running
  * {@link NextBorderIndicator} that has a ring to draw. The event hooks run on the main thread: the tracker hooks from the
  * border's tick task, or from {@link GameBorder#remove()} for {@link #onWarningCleared(UUID)}, and the phase hooks from the
  * controller's wait task, from the border's animation task when a shrink lands, or synchronously inside the
@@ -28,16 +28,6 @@ public interface BorderCallbacks {
      * removed. Defaults to null.
      */
     default Component warningTitle() {
-        return null;
-    }
-
-    /**
-     * Item-model key for the wall display entities, or null when no resource pack is installed. Non-null makes the border spawn
-     * its {@code ItemDisplay} anchor grid carrying a {@code Material.PAPER} stack with this item model, and every player then
-     * defaults to {@link BorderRenderMode#SHADER}. Null skips the grid entirely, never consults the render-mode resolver and renders
-     * the border as particles for everyone. Defaults to null.
-     */
-    default NamespacedKey wallItemModel() {
         return null;
     }
 
@@ -103,12 +93,17 @@ public interface BorderCallbacks {
         return "minecraft:entity.wither.spawn";
     }
 
+    /** The wall colour {@link #wallColor()} answers by default, the rift-border pack's own aqua, {@code #55FFFF}. */
+    Color DEFAULT_WALL_COLOR = Color.fromRGB(0x55, 0xFF, 0xFF);
+
     /**
-     * Dust colour of the particle wall shown to players in {@link BorderRenderMode#PARTICLE}. Read on every particle pass, every
-     * 40 ticks, so the colour may change while the border is live. Defaults to white.
+     * Colour of the border wall in both render modes: the dust of the particle wall, and the tint of the shader wall, whose
+     * display items carry it as their dyed colour for the pack to tint from. The particle wall reads it on every pass, every 40
+     * ticks, so a change shows within two seconds, while the shader wall reads it once at {@link GameBorder#spawn(double)}, so a
+     * change reaches the shader wall on the next spawn. A null answer draws {@link #DEFAULT_WALL_COLOR}, which is also the default.
      */
-    default Color particleColor() {
-        return Color.WHITE;
+    default Color wallColor() {
+        return DEFAULT_WALL_COLOR;
     }
 
     /**
