@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,17 +28,26 @@ class GameBorderLifecycleTest {
     void setUp() {
         scheduler = new TestMocks.FakeScheduler();
         plugin = TestMocks.plugin(scheduler);
-        border = new GameBorder(plugin, TestMocks.world(), 10, 64, -20)
-            .withCallbacks(new BorderCallbacks() {});
+        border = new GameBorder(plugin, TestMocks.world(), 10, 64, -20);
     }
 
     @Test
-    void spawnWithoutCallbacksThrowsAndNamesWithCallbacks() {
+    void aBorderWithNoThemeOrEventsSpawnsOnTheDefaults() {
         GameBorder bare = new GameBorder(plugin, TestMocks.world(), 0, 64, 0);
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> bare.spawn(100));
-        assertTrue(e.getMessage().contains("withCallbacks"), e.getMessage());
-        assertFalse(bare.isActive());
-        assertEquals(0, scheduler.pending());
+        bare.spawn(100);
+        assertTrue(bare.isActive());
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, bare.wallColor());
+        assertEquals(2, scheduler.pending(), "particle and damage");
+        bare.remove();
+    }
+
+    @Test
+    void aNullThemeOrEventsRestoresTheDefaults() {
+        border.withTheme(null).withEvents(null);
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, border.wallColor());
+        border.spawn(100);
+        assertTrue(border.isActive());
+        border.remove();
     }
 
     @Test
@@ -71,22 +80,22 @@ class GameBorderLifecycleTest {
     @Test
     void withoutTheShaderWallEveryPlayerIsParticleModeAndTheResolverIsNeverAsked() {
         AtomicInteger asked = new AtomicInteger();
-        border.withRenderModeResolver(uuid -> {
+        border.withWallStyleResolver(uuid -> {
             asked.incrementAndGet();
-            return BorderRenderMode.SHADER;
+            return WallStyle.SHADER;
         });
         border.spawn(100);
-        assertEquals(BorderRenderMode.PARTICLE, border.renderModeFor(UUID.randomUUID()));
+        assertEquals(WallStyle.PARTICLE, border.styleFor(UUID.randomUUID()));
         assertEquals(0, asked.get(), "without the shader wall the resolver is short-circuited, not consulted");
     }
 
     @Test
     void optingIntoTheShaderWallAfterSpawnChangesNothingUntilTheNextSpawn() {
-        border.withRenderModeResolver(uuid -> BorderRenderMode.SHADER);
+        border.withWallStyleResolver(uuid -> WallStyle.SHADER);
         border.spawn(100);
         border.withShaderWall();
         // no display grid was spawned, so the live border must keep everyone on particles
-        assertEquals(BorderRenderMode.PARTICLE, border.renderModeFor(UUID.randomUUID()));
+        assertEquals(WallStyle.PARTICLE, border.styleFor(UUID.randomUUID()));
     }
 
     @Test
@@ -110,9 +119,9 @@ class GameBorderLifecycleTest {
     @Test
     void removeStopsAnAttachedControllerBeforeItsWaitEnds() {
         AtomicInteger shrinks = new AtomicInteger();
-        border.withCallbacks(new BorderCallbacks() {
+        border.withEvents(new BorderEvents() {
             @Override
-            public void shrinkStarted() {
+            public void onShrinkStart() {
                 shrinks.incrementAndGet();
             }
         });
@@ -134,9 +143,9 @@ class GameBorderLifecycleTest {
     @Test
     void anAttachedControllerLeftAloneShrinksOnceItsWaitEnds() {
         AtomicInteger shrinks = new AtomicInteger();
-        border.withCallbacks(new BorderCallbacks() {
+        border.withEvents(new BorderEvents() {
             @Override
-            public void shrinkStarted() {
+            public void onShrinkStart() {
                 shrinks.incrementAndGet();
             }
         });

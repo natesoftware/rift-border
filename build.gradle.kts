@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.natesoftware"
-version = "2.2.0"
+version = "3.0.0"
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -53,13 +53,13 @@ publishing {
         create<MavenPublication>("maven") {
             from(components["java"])
             pom {
-                name = "rift-border"
+                name = "rift-border-api"
                 description = "A volumetric circular shrinking border for Paper servers."
-                url = "https://github.com/natesoftware/rift-border"
+                url = "https://github.com/natesoftware/rift-border-api"
                 licenses {
                     license {
                         name = "MIT License"
-                        url = "https://github.com/natesoftware/rift-border/blob/main/LICENSE"
+                        url = "https://github.com/natesoftware/rift-border-api/blob/main/LICENSE"
                     }
                 }
             }

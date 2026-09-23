@@ -20,5 +20,5 @@ jobs:
       - run: ./gradlew build --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: rift-border
+          name: rift-border-api
           path: build/libs/*.jar

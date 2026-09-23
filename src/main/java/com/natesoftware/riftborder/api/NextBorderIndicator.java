@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import org.bukkit.Color;
 import org.bukkit.Particle;
@@ -14,8 +14,8 @@ import org.bukkit.scheduler.BukkitTask;
  * them on the horizontal plane, forced past the client's own particle distance cull. The ring is rebuilt whenever the
  * controller's phase index changes, so it appears on the first pulse after a phase's wait begins, stays through the shrink, and
  * shows nothing while no phase is active or the target radius is 0 or less. A schedule restarted on the same index keeps the old
- * ring until the index changes or {@link #stop()} clears it. The colour is {@link BorderCallbacks#indicatorColor()}, read on every
- * pulse that draws, with null drawn as white. It ignores the border's participant set and render modes. Constructing one
+ * ring until the index changes or {@link #stop()} clears it. The colour is {@link BorderTheme#indicatorColor()}, read on every
+ * pulse that draws, with null drawn as white. It ignores the border's participant set and wall styles. Constructing one
  * registers it on the controller's border in place of any indicator registered before, so {@link GameBorder#remove()} stops it,
  * after which only {@link #start()} runs it again.
  */
@@ -91,7 +91,7 @@ public final class NextBorderIndicator {
         }
         if (ringX == null) return;
 
-        Color color = border.callbacks != null ? border.callbacks.indicatorColor() : null;
+        Color color = border.theme.indicatorColor();
         Particle.DustOptions dust = new Particle.DustOptions(color != null ? color : Color.WHITE, 1.0f);
         for (Player p : border.world.getPlayers()) {
             double px = p.getLocation().getX();

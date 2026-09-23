@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -141,8 +141,8 @@ public class BorderPhaseController {
 
     /**
      * Begins phase progression against a game clock of gameDuration seconds, entering phase 1's wait immediately: its target is
-     * resolved, its damage rate applied to the border, {@link BorderCallbacks#phaseStarted(int, int, int)} and
-     * {@link BorderCallbacks#playPhaseSound()} called synchronously, and the wait scheduled. The border's centre at this moment
+     * resolved, its damage rate applied to the border, {@link BorderEvents#onPhaseStart(int, int, int)} and
+     * {@link BorderEvents#playPhaseSound()} called synchronously, and the wait scheduled. The border's centre at this moment
      * is snapshotted as the circle phase 1 shrinks from, together with the constructor's initialRadius, and while the border is
      * active a live radius that differs from initialRadius is logged as a warning, since the clamp uses initialRadius regardless.
      * Calling it again, including after {@link #stop()}, restarts from phase 1 with fresh targets and an unpaused state, cancelling
@@ -189,9 +189,11 @@ public class BorderPhaseController {
      * one, with null clearing it. It runs on the main thread: from the final shrink's completion under natural progression, or
      * synchronously inside a {@link #syncToGameTimer(int)} that snaps past the end of the schedule, but not again from a repeat
      * resync past the end while the schedule is already complete. On an empty schedule it fires from {@link #start(int)}.
+     * Returns this for chaining.
      */
-    public void setOnAllPhasesComplete(Runnable callback) {
+    public BorderPhaseController onAllPhasesComplete(Runnable callback) {
         this.onAllPhasesComplete = callback;
+        return this;
     }
 
     /**
@@ -247,9 +249,9 @@ public class BorderPhaseController {
      * cursor to wherever the schedule laid out by {@link #start(int)} places them and resolving targets, in order, for every
      * phase up to that point that has none yet. Landing in a phase's wait snaps the border to the previous phase's end shape, or
      * before phase 1 to the start centre, initialRadius and no ceiling or floor, applies that phase's damage rate, calls
-     * {@link BorderCallbacks#phaseStarted(int, int, int)} with the remaining wait, and schedules it. Landing mid-shrink snaps
+     * {@link BorderEvents#onPhaseStart(int, int, int)} with the remaining wait, and schedules it. Landing mid-shrink snaps
      * the border to the interpolated point along that shrink, applies the damage rate, calls
-     * {@link BorderCallbacks#shrinkStarted()}, and resumes the shrink over the remaining seconds. No phase or shrink sound plays
+     * {@link BorderEvents#onShrinkStart()}, and resumes the shrink over the remaining seconds. No phase or shrink sound plays
      * on a resync. A reading above the gameDuration given to {@link #start(int)}, whatever the schedule adds up to, stretches
      * phase 1's wait to absorb the surplus rather than snapping the border shut. A reading at or below the end of the last shrink
      * snaps the border closed on the last phase's target, radius, ceiling and floor, applies its damage rate, and fires the
@@ -309,12 +311,12 @@ public class BorderPhaseController {
     }
 
     /** Alias of {@link #syncToGameTimer(int)} for hosts that phrase the resync as setting the time remaining. */
-    public void setRemainingTime(int totalSeconds) {
+    public void setRemainingSeconds(int totalSeconds) {
         syncToGameTimer(totalSeconds, 20L);
     }
 
     /** Alias of {@link #syncToGameTimer(int, long)}. */
-    public void setRemainingTime(int totalSeconds, long firstDecrementOffset) {
+    public void setRemainingSeconds(int totalSeconds, long firstDecrementOffset) {
         syncToGameTimer(totalSeconds, firstDecrementOffset);
     }
 
@@ -328,7 +330,7 @@ public class BorderPhaseController {
 
     /**
      * Zero-based index of the phase in progress: -1 before {@link #start(int)}, 0 up to the schedule length minus one while a
-     * phase waits or shrinks, and the schedule length once every phase has landed. Callbacks receive the one-based number.
+     * phase waits or shrinks, and the schedule length once every phase has landed. {@link BorderEvents} receive the one-based number.
      */
     public int getCurrentPhase() {
         return currentPhase;
@@ -445,8 +447,8 @@ public class BorderPhaseController {
         targetFor(currentPhase);
         border.setDamagePerSecond(phase.damage());
         int phaseNum = currentPhase + 1;
-        border.callbacks.phaseStarted(phaseNum, phases.size(), phase.waitSeconds());
-        border.callbacks.playPhaseSound();
+        border.events.onPhaseStart(phaseNum, phases.size(), phase.waitSeconds());
+        border.events.playPhaseSound();
 
         subPhase = SubPhase.WAIT;
         subPhaseStartTick = currentTick();
@@ -463,8 +465,8 @@ public class BorderPhaseController {
         subPhaseStartTick = currentTick();
         subPhaseDurationTicks = phase.shrinkSeconds() * 20;
 
-        border.callbacks.shrinkStarted();
-        border.callbacks.playShrinkSound();
+        border.events.onShrinkStart();
+        border.events.playShrinkSound();
         border.moveTo(
             target.x(), target.z(), phase.endRadius(), phase.endHeight(), phase.endMinHeight(), subPhaseDurationTicks);
     }
@@ -490,7 +492,7 @@ public class BorderPhaseController {
         subPhaseDurationTicks = waitSecondsRemaining * 20 - offsetCompensation;
 
         int phaseNum = currentPhase + 1;
-        border.callbacks.phaseStarted(phaseNum, phases.size(), waitSecondsRemaining);
+        border.events.onPhaseStart(phaseNum, phases.size(), waitSecondsRemaining);
         if (paused) {
             // Stay frozen at the new position; resume() will reschedule when called.
             pausedRemainingTicks = subPhaseDurationTicks;
@@ -544,7 +546,7 @@ public class BorderPhaseController {
         subPhaseStartTick = currentTick();
         subPhaseDurationTicks = remainingSeconds * 20 - offsetCompensation;
 
-        border.callbacks.shrinkStarted();
+        border.events.onShrinkStart();
         border.moveTo(
             target.x(), target.z(), phase.endRadius(), phase.endHeight(), phase.endMinHeight(), subPhaseDurationTicks);
         if (paused) {

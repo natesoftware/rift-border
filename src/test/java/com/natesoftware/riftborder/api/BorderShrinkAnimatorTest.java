@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,8 +22,7 @@ class BorderShrinkAnimatorTest {
     @BeforeEach
     void setUp() {
         scheduler = new TestMocks.FakeScheduler();
-        border = new GameBorder(TestMocks.plugin(scheduler), TestMocks.world(), 0, 64, 0)
-            .withCallbacks(new BorderCallbacks() {});
+        border = new GameBorder(TestMocks.plugin(scheduler), TestMocks.world(), 0, 64, 0);
         border.setPosition(0, 0, 200);
     }
 
@@ -158,7 +157,7 @@ class BorderShrinkAnimatorTest {
     void theShrinkColourShowsOnlyWhileTheBorderMoves() {
         Color wall = Color.fromRGB(0x55FFFF);
         Color shrink = Color.fromRGB(0xFF5555);
-        border.withCallbacks(new BorderCallbacks() {
+        border.withTheme(new BorderTheme() {
             @Override
             public Color wallColor() {
                 return wall;
@@ -194,6 +193,6 @@ class BorderShrinkAnimatorTest {
     void withoutAShrinkColourTheWallKeepsItsColourWhileMoving() {
         border.moveTo(0, 0, 100, 100);
         assertTrue(border.isMoving());
-        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, border.wallColor());
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, border.wallColor());
     }
 }

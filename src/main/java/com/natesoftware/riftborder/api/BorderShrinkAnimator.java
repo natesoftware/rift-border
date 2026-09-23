@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import org.bukkit.scheduler.BukkitTask;
 

@@ -1,11 +1,11 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import org.bukkit.Color;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
-// Renders the border wall as a per-player particle patch for players in PARTICLE render mode.
+// Renders the border wall as a per-player particle patch for players on the PARTICLE wall style.
 // Unlike the shader cylinder this only shows the arc of wall near the player - geometry is recomputed
 // every pass because the radius and center animate continuously during shrinks.
 final class ParticleBorderRenderer {
@@ -54,7 +54,7 @@ final class ParticleBorderRenderer {
         if (radius <= 0) return;
         Color color = border.wallColor();
         for (Player player : border.world.getPlayers()) {
-            if (border.renderModeFor(player.getUniqueId()) != BorderRenderMode.PARTICLE) continue;
+            if (border.styleFor(player.getUniqueId()) != WallStyle.PARTICLE) continue;
             renderPatchFor(player, radius, color);
         }
     }

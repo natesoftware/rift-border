@@ -1,16 +1,16 @@
-# rift-border
+# rift-border-api
 
-[![build](https://github.com/natesoftware/rift-border/actions/workflows/build.yml/badge.svg)](https://github.com/natesoftware/rift-border/actions/workflows/build.yml)
+[![build](https://github.com/natesoftware/rift-border-api/actions/workflows/build.yml/badge.svg)](https://github.com/natesoftware/rift-border-api/actions/workflows/build.yml)
 
 A volumetric circular border for Paper 1.21.11 servers. Renders a shrinkable
 cylinder, animates shape transitions, and damages players who stray outside the
 radius or beyond an optional ceiling / floor.
 
-This repository is the API you build against. On a server it runs as the
+This repository is the API you build against. On a server it runs inside the
 **RiftBorder** plugin, which provides these classes to every plugin that uses
 them, delivers the resource pack that draws the solid shader wall, and gives
-players `/border` to choose their wall. RiftBorder is not published: message
-`Nateiwnl` on Discord for the jar.
+players `/border` to choose their wall style. RiftBorder is not published:
+message `Nateiwnl` on Discord for the jar.
 
 ## Features
 
@@ -21,7 +21,7 @@ players `/border` to choose their wall. RiftBorder is not published: message
 - Per-player damage with grace period, warning title, and re-entry sound
 - A solid shader wall or a particle wall per player, chosen for you by the plugin
 - Particle-ring preview of the next phase's target
-- One integration point (`BorderCallbacks`) for branding, messages, and sound
+- `BorderTheme` for how it looks and sounds, `BorderEvents` for reacting to what happens
 
 ## Requirements
 
@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border:v2.2.0")
+    compileOnly("com.github.natesoftware:rift-border-api:v3.0.0")
 }
 ```
 
@@ -53,28 +53,28 @@ depend: [RiftBorder]
 
 **Do not shade or bundle the library.** RiftBorder provides it at runtime, so
 every plugin on the server shares one copy of these classes. That shared copy
-is how your borders find the pack and each player's wall choice with no wiring
+is how your borders find the pack and each player's wall style with no wiring
 at all; a bundled copy would be cut off from it and show everyone particles.
 
-Package `com.natesoftware.riftborder`. To build against local changes instead,
-clone this repo beside your plugin, add `includeBuild("../rift-border")` to
-`settings.gradle.kts`, and use `compileOnly("com.natesoftware:rift-border:2.2.0")`.
+Package `com.natesoftware.riftborder.api`. To build against local changes
+instead, clone this repo beside your plugin, add
+`includeBuild("../rift-border-api")` to `settings.gradle.kts`, and use
+`compileOnly("com.natesoftware:rift-border-api:3.0.0")`.
 
 ## Usage
 
 ```java
-import com.natesoftware.riftborder.BorderCallbacks;
-import com.natesoftware.riftborder.GameBorder;
+import com.natesoftware.riftborder.api.GameBorder;
 
 GameBorder border = new GameBorder(plugin, world, centerX, centerY, centerZ)
-    .withCallbacks(new BorderCallbacks() {})        // required, even if empty
     .withParticipants(() -> alivePlayerUuids);      // Supplier<Set<UUID>>
 border.spawn(200);
 ```
 
-`withCallbacks` is mandatory; `spawn()` throws without it. `withParticipants`
+That is a working border with the library's look and sound. `withParticipants`
 is optional, but without it **every survival or adventure player in the world**
-is subject to the border.
+is subject to the border. [Theme and events](#theme-and-events) covers making it
+your own.
 
 From here there are two ways to drive it. Pick one.
 
@@ -97,9 +97,9 @@ continue an in-flight shrink.
 Or hand over a schedule and let the library drive:
 
 ```java
-import com.natesoftware.riftborder.BorderPhase;
-import com.natesoftware.riftborder.BorderPhaseController;
-import com.natesoftware.riftborder.NextBorderIndicator;
+import com.natesoftware.riftborder.api.BorderPhase;
+import com.natesoftware.riftborder.api.BorderPhaseController;
+import com.natesoftware.riftborder.api.NextBorderIndicator;
 
 List<BorderPhase> phases = List.of(
     new BorderPhase(60, 30, 100, 2.0),  // wait 60s, shrink 30s to r=100, 2 dmg/s
@@ -115,7 +115,7 @@ NextBorderIndicator indicator = new NextBorderIndicator(controller);
 indicator.start();
 ```
 
-`gameDurationSeconds` is the clock every later `setRemainingTime` reading is
+`gameDurationSeconds` is the clock every later `setRemainingSeconds` reading is
 measured against. Under natural progression it only needs to cover the
 schedule (the sum of every phase's wait and shrink); pass your own round
 length if you sync to a game timer.
@@ -129,8 +129,8 @@ If your game has its own clock, keep the controller aligned with it:
 ```java
 controller.pause();
 controller.resume();
-controller.setRemainingTime(secondsLeft);      // re-sync after a host adds or removes time
-controller.setOnAllPhasesComplete(() -> ...);  // the last phase has landed
+controller.setRemainingSeconds(secondsLeft);   // re-sync after a host adds or removes time
+controller.onAllPhasesComplete(() -> ...);     // the last phase has landed
 int hud = controller.getSubPhaseRemaining();   // seconds left in the current wait or shrink
 ```
 
@@ -161,34 +161,46 @@ Always tear down when the match ends and on plugin disable:
 border.remove();      // also stops any controller and indicator attached to it
 ```
 
-In shader mode the border force-loads the chunks holding its wall anchors while
-it is active. Those flags are saved with the world, so skipping `remove()`
-leaves the chunks pinned loaded across restarts. Particle mode force-loads
-nothing.
+With the shader wall on, the border force-loads the chunks holding its wall
+anchors while it is active. Those flags are saved with the world, so skipping
+`remove()` leaves the chunks pinned loaded across restarts. The particle wall
+force-loads nothing.
 
-### Callbacks
+### Theme and events
 
-Every member of `BorderCallbacks` has a default, so implement only what you
-want to change:
+Two optional interfaces, both all-defaults, so implement only what you want to
+change:
+
+- **`BorderTheme`**: how the border looks and sounds. Wall colour, colour while
+  shrinking, warning title, the sounds for crossing out and staying out.
+- **`BorderEvents`**: what happens. A phase or shrink starting, a player
+  crossing out or coming back. Every event does nothing by default.
 
 ```java
-public class MyCallbacks implements BorderCallbacks {
-    @Override
-    public Component warningTitle() {
-        return Component.text("Get back inside!", NamedTextColor.RED);
-    }
-}
+GameBorder border = new GameBorder(plugin, world, x, y, z)
+    .withTheme(new BorderTheme() {
+        @Override
+        public Color shrinkColor() {
+            return Color.RED;                     // red while it moves
+        }
+    })
+    .withEvents(new BorderEvents() {
+        @Override
+        public void onPhaseStart(int phase, int total, int waitSeconds) {
+            Bukkit.broadcast(Component.text("Phase " + phase + "/" + total));
+        }
+    });
 ```
 
-What players get out of the box:
+One class may implement both. What players get out of the box:
 
 | | Default |
 | --- | --- |
 | Damage outside the border | 2.0 / s, after a 1 s grace, with the vanilla hurt flash and sound |
-| Warning title | none (`warningTitle()` returns null). When set, it owns the player's title slot while they are outside |
-| Sound on crossing out | `minecraft:block.anvil.land` |
-| Sound while still outside | `minecraft:entity.wither.spawn`, every 5 s |
-| Wall colour, both render modes | aqua `#55FFFF` (`wallColor()`) |
+| Warning title | `ʙᴏʀᴅᴇʀ ᴡᴀʀɴɪɴɢ` in red small caps (`DEFAULT_WARNING_TITLE`). It owns the player's title slot while they are outside; return null from `warningTitle()` for none |
+| Sound on crossing out | `minecraft:block.note_block.bass` |
+| Sound while still outside | the crossing-out sound again, every 5 s |
+| Wall colour, both wall styles | aqua `#55FFFF` (`wallColor()`) |
 | Colour while shrinking or moving | the wall colour (`shrinkColor()` returns null) |
 | Creative / spectator | ignored |
 
@@ -200,19 +212,19 @@ to 0 (the warnings and sounds keep working) and deal it yourself from
 `onWarningShown` / `onWarningCleared`, which tell you exactly who is outside
 and when they return.
 
-## Rendering
+## Wall styles
 
-Players see one of two walls:
+Each player sees one of two wall styles (`WallStyle`):
 
-| Wall | What it looks like |
+| Style | What it looks like |
 | --- | --- |
-| Shader | A solid cylinder wall, drawn by the rift-border resource pack |
-| Particles | A dust wall on the arc nearest the player, density scaled to the current radius |
+| `SHADER` | A solid cylinder wall, drawn by the rift-border resource pack |
+| `PARTICLE` | A dust wall on the arc nearest the player, density scaled to the current radius |
 
 **You configure nothing.** The RiftBorder plugin decides per player: anyone
 whose client loaded the pack sees the shader wall, anyone who declined it or
-chose `/border particle` sees particles. Both walls take their colour from
-`wallColor()` on your callbacks (aqua `#55FFFF` by default), and both follow a
+chose `/border particle` sees particles. Both take their colour from
+`wallColor()` on your theme (aqua `#55FFFF` by default), and both follow a
 change within two seconds while the border is live. Return a `shrinkColor()` as
 well and the wall switches to it while the border is moving, and back once it
 lands.
@@ -222,11 +234,12 @@ The server owner chooses how the pack reaches players in RiftBorder's
 inside another plugin's pack.
 
 Two overrides exist for special cases. `withShaderWall()` forces the shader
-wall on, and `withRenderModeResolver(uuid -> ...)` replaces the per-player
-choice for one border. `BorderEnvironment.get()` exposes the plugin's side,
-including each player's choice, for a settings menu of your own.
+wall on, and `withWallStyleResolver(uuid -> ...)` decides every player's style
+for one border. `WallStyles.get()` is the plugin's side: whether the shader
+wall is available, and each player's chosen style, for a settings menu of your
+own.
 
-Shader mode mounts its wall on an anchor grid: one invisible display every 80
+The shader wall is mounted on an anchor grid: one invisible display every 80
 blocks, out to 500 blocks from the centre. A radius past that cap renders no
 wall on its far side and logs a warning at spawn. Both numbers are tunable:
 
@@ -238,7 +251,7 @@ border.withGrid(80, 1200)   // spacing, max extent
 ### Pack contract
 
 The wall is a `Material.PAPER` `ItemStack` with the item model
-`rift-border:border`, dyed with the host's `wallColor()`, carried by
+`rift-border:border`, dyed with the theme's `wallColor()`, carried by
 `ItemDisplay` entities on an 80-block grid. The pack's item definition tints
 from that dyed colour, the model is expanded into a cylinder by a core-shader
 override that colours the wall from the tint, and the border's
@@ -267,8 +280,26 @@ tears everything down on disable. Drop it into a project set up per
 ```
 
 The public types carry Javadoc, also hosted per release at
-`https://javadoc.jitpack.io/com/github/natesoftware/rift-border/<tag>/javadoc/`;
+`https://javadoc.jitpack.io/com/github/natesoftware/rift-border-api/<tag>/javadoc/`;
 the internals carry `//` notes. CI runs `build` on every push and pull request.
+
+## Upgrading from 2.x
+
+3.0.0 renames the API so every name says what it is. The behaviour is unchanged.
+
+| 2.x | 3.0.0 |
+| --- | --- |
+| `com.github.natesoftware:rift-border` | `com.github.natesoftware:rift-border-api` |
+| package `com.natesoftware.riftborder` | `com.natesoftware.riftborder.api` |
+| `BorderCallbacks` + `withCallbacks` (required) | `BorderTheme` + `withTheme`, `BorderEvents` + `withEvents` (both optional) |
+| `phaseStarted`, `shrinkStarted` | `onPhaseStart`, `onShrinkStart` |
+| `enterSoundKey`, `enterLongSoundKey` | `enterSound`, `enterLongSound` |
+| `BorderRenderMode` | `WallStyle` |
+| `BorderEnvironment` | `WallStyles` |
+| `renderModeFor`, `preference`, `setPreference` | `styleFor`, `chosenStyle`, `setChosenStyle` |
+| `withRenderModeResolver` | `withWallStyleResolver` |
+| `setRemainingTime` | `setRemainingSeconds` |
+| `setOnAllPhasesComplete` | `onAllPhasesComplete` (now chainable) |
 
 ## Licence
 

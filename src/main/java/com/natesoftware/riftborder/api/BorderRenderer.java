@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -276,7 +276,7 @@ final class BorderRenderer {
 
         for (Player player : border.world.getPlayers()) {
             // Particle-mode players get the particle wall instead - hide any anchor they were shown.
-            if (border.renderModeFor(player.getUniqueId()) == BorderRenderMode.PARTICLE) {
+            if (border.styleFor(player.getUniqueId()) == WallStyle.PARTICLE) {
                 ItemDisplay shown = shownByPlayer.remove(player.getUniqueId());
                 if (shown != null && !shown.isDead()) player.hideEntity(border.plugin, shown);
                 continue;

@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,13 +36,25 @@ import org.junit.jupiter.api.Test;
 // Damage stays at 0 throughout: the hurt path reaches Sound.ENTITY_PLAYER_HURT, a registry-backed constant no test server can load.
 class BorderDamageTrackerTest {
 
-    private static final String ENTER_SOUND = "minecraft:block.anvil.land";
-    private static final String LONG_SOUND = "minecraft:entity.wither.spawn";
+    // Set explicitly and distinct, so these tests follow the tracker rather than the library's default sounds.
+    private static final String ENTER_SOUND = "test:border.enter";
+    private static final String LONG_SOUND = "test:border.long";
     private static final UUID ID = UUID.randomUUID();
 
     private final long[] clockMs = {0};
     private final List<UUID> shown = new ArrayList<>();
     private final List<UUID> cleared = new ArrayList<>();
+    private final BorderEvents recorder = new BorderEvents() {
+        @Override
+        public void onWarningShown(UUID uuid) {
+            shown.add(uuid);
+        }
+
+        @Override
+        public void onWarningCleared(UUID uuid) {
+            cleared.add(uuid);
+        }
+    };
 
     private TestMocks.FakeScheduler scheduler;
     private World world;
@@ -68,22 +80,9 @@ class BorderDamageTrackerTest {
         when(world.getPlayers()).thenReturn(List.of(player));
         when(server.getPlayer(ID)).thenReturn(player);
 
-        border = new GameBorder(plugin, world, 0, 64, 0).withCallbacks(new BorderCallbacks() {
-            @Override
-            public Component warningTitle() {
-                return Component.text("Outside the border");
-            }
-
-            @Override
-            public void onWarningShown(UUID uuid) {
-                shown.add(uuid);
-            }
-
-            @Override
-            public void onWarningCleared(UUID uuid) {
-                cleared.add(uuid);
-            }
-        });
+        border = new GameBorder(plugin, world, 0, 64, 0)
+            .withTheme(new TestTheme(Component.text("Outside the border")))
+            .withEvents(recorder);
         border.setDamagePerSecond(0);
         tracker = border.damageTracker;
         tracker.clock = () -> clockMs[0];
@@ -98,21 +97,11 @@ class BorderDamageTrackerTest {
         return location;
     }
 
-    // Tears the setUp border down and spawns a second one on the same world whose callbacks leave warningTitle() at its null default,
+    // Tears the setUp border down and spawns a second one on the same world whose theme has no warning title,
     // so exactly one tracker scans the player and it holds no title of its own to clear.
     private GameBorder spawnBorderWithoutWarningTitle() {
         border.remove();
-        GameBorder bare = new GameBorder(border.plugin, world, 0, 64, 0).withCallbacks(new BorderCallbacks() {
-            @Override
-            public void onWarningShown(UUID uuid) {
-                shown.add(uuid);
-            }
-
-            @Override
-            public void onWarningCleared(UUID uuid) {
-                cleared.add(uuid);
-            }
-        });
+        GameBorder bare = new GameBorder(border.plugin, world, 0, 64, 0).withTheme(new TestTheme(null)).withEvents(recorder);
         bare.setDamagePerSecond(0);
         bare.damageTracker.clock = () -> clockMs[0];
         bare.spawn(100);
@@ -382,5 +371,18 @@ class BorderDamageTrackerTest {
         assertEquals(List.of(ID), cleared);
         verify(player, times(1)).clearTitle();
         verify(player).showTitle(any(Title.class));
+    }
+
+    // The test sounds, and the given warning title, which may be null for none.
+    private record TestTheme(Component warningTitle) implements BorderTheme {
+        @Override
+        public String enterSound() {
+            return ENTER_SOUND;
+        }
+
+        @Override
+        public String enterLongSound() {
+            return LONG_SOUND;
+        }
     }
 }

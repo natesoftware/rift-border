@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 /**
  * One step of a border schedule: wait, then shrink to endRadius over shrinkSeconds, dealing damage per second to anyone outside.

@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -55,8 +55,8 @@ final class BorderDamageTracker {
     private final Map<UUID, Long> lastLongPlayedMs = new HashMap<>();
 
     private Title warningTitle;
-    private String enterSoundKey;
-    private String enterLongSoundKey;
+    private String enterSound;
+    private String enterLongSound;
     private BukkitTask task;
     private int checkCounter;
     private int indicatorCounter;
@@ -68,10 +68,10 @@ final class BorderDamageTracker {
     void start() {
         checkCounter = 0;
         indicatorCounter = 0;
-        Component warning = border.callbacks.warningTitle();
+        Component warning = border.theme.warningTitle();
         warningTitle = warning != null ? Title.title(warning, Component.empty(), WARNING_TIMES) : null;
-        enterSoundKey = border.callbacks.enterSoundKey();
-        enterLongSoundKey = border.callbacks.enterLongSoundKey();
+        enterSound = border.theme.enterSound();
+        enterLongSound = border.theme.enterLongSound();
         task = border.plugin
                 .getServer()
                 .getScheduler()
@@ -84,12 +84,12 @@ final class BorderDamageTracker {
             task = null;
         }
         for (UUID uuid : outsidePlayers) {
-            border.callbacks.onWarningCleared(uuid);
+            border.events.onWarningCleared(uuid);
             Player p = border.plugin.getServer().getPlayer(uuid);
             if (p == null || !p.isOnline()) continue;
             // the warning title has a day-long stay, so a player still outside at teardown keeps it until something clears it
             if (warningTitle != null) p.clearTitle();
-            if (lastLongPlayedMs.containsKey(uuid) && enterLongSoundKey != null) p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
+            if (lastLongPlayedMs.containsKey(uuid) && enterLongSound != null) p.stopSound(enterLongSound, SoundCategory.MASTER);
         }
         outsidePlayers.clear();
         outsideSinceMs.clear();
@@ -154,9 +154,9 @@ final class BorderDamageTracker {
             if (!was) {
                 outsidePlayers.add(player.getUniqueId());
                 outsideSinceMs.put(player.getUniqueId(), clock.getAsLong());
-                border.callbacks.onWarningShown(player.getUniqueId());
-                if (enterSoundKey != null) {
-                    player.playSound(loc, enterSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
+                border.events.onWarningShown(player.getUniqueId());
+                if (enterSound != null) {
+                    player.playSound(loc, enterSound, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
                 if (warningTitle != null) player.showTitle(warningTitle);
             } else {
@@ -166,8 +166,8 @@ final class BorderDamageTracker {
                 boolean dueForLong = enteredAt != null
                         && now - enteredAt >= LONG_ENTER_INTERVAL_MS
                         && (lastPlayed == null || now - lastPlayed >= LONG_ENTER_INTERVAL_MS);
-                if (dueForLong && enterLongSoundKey != null) {
-                    player.playSound(loc, enterLongSoundKey, SoundCategory.MASTER, 0.5f, 1.0f);
+                if (dueForLong && enterLongSound != null) {
+                    player.playSound(loc, enterLongSound, SoundCategory.MASTER, 0.5f, 1.0f);
                     lastLongPlayedMs.put(player.getUniqueId(), now);
                 }
                 if (shouldDamage && warningTitle != null) {
@@ -189,10 +189,10 @@ final class BorderDamageTracker {
     private void markInside(Player player) {
         outsidePlayers.remove(player.getUniqueId());
         outsideSinceMs.remove(player.getUniqueId());
-        if (lastLongPlayedMs.remove(player.getUniqueId()) != null && enterLongSoundKey != null) {
-            player.stopSound(enterLongSoundKey, SoundCategory.MASTER);
+        if (lastLongPlayedMs.remove(player.getUniqueId()) != null && enterLongSound != null) {
+            player.stopSound(enterLongSound, SoundCategory.MASTER);
         }
-        border.callbacks.onWarningCleared(player.getUniqueId());
+        border.events.onWarningCleared(player.getUniqueId());
         if (warningTitle != null) player.clearTitle();
     }
 
@@ -214,12 +214,12 @@ final class BorderDamageTracker {
             boolean gone = p == null || !p.isOnline() || !p.getWorld().equals(border.world);
             boolean noLongerParticipant = participantUuids != null && !participantUuids.contains(uuid);
             if (gone || noLongerParticipant) {
-                border.callbacks.onWarningCleared(uuid);
+                border.events.onWarningCleared(uuid);
                 if (p != null && p.isOnline()) {
                     // guarded like the other exit paths - with no warning title configured there is nothing of ours to clear
                     if (warningTitle != null) p.clearTitle();
-                    if (lastLongPlayedMs.containsKey(uuid) && enterLongSoundKey != null) {
-                        p.stopSound(enterLongSoundKey, SoundCategory.MASTER);
+                    if (lastLongPlayedMs.containsKey(uuid) && enterLongSound != null) {
+                        p.stopSound(enterLongSound, SoundCategory.MASTER);
                     }
                 }
                 outsideSinceMs.remove(uuid);

@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -94,16 +94,16 @@ class GameBorderGeometryTest {
     }
 
     @Test
-    void theWallColourDefaultsToThePackAquaForBothRenderModes() {
-        assertEquals(Color.fromRGB(0x55, 0xFF, 0xFF), BorderCallbacks.DEFAULT_WALL_COLOR);
-        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, new BorderCallbacks() {}.wallColor());
-        // no callbacks yet still resolves to the default rather than failing
-        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, new GameBorder(plugin, world, 0, 64, 0).wallColor());
+    void theWallColourDefaultsToThePackAquaForBothWallStyles() {
+        assertEquals(Color.fromRGB(0x55, 0xFF, 0xFF), BorderTheme.DEFAULT_WALL_COLOR);
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, new BorderTheme() {}.wallColor());
+        // a border given no theme draws the default
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, new GameBorder(plugin, world, 0, 64, 0).wallColor());
     }
 
     @Test
     void aCustomWallColourPassesThroughAndANullAnswerFallsBackToTheDefault() {
-        GameBorder border = new GameBorder(plugin, world, 0, 64, 0).withCallbacks(new BorderCallbacks() {
+        GameBorder border = new GameBorder(plugin, world, 0, 64, 0).withTheme(new BorderTheme() {
             @Override
             public Color wallColor() {
                 return Color.RED;
@@ -111,12 +111,12 @@ class GameBorderGeometryTest {
         });
         assertEquals(Color.RED, border.wallColor());
 
-        border.withCallbacks(new BorderCallbacks() {
+        border.withTheme(new BorderTheme() {
             @Override
             public Color wallColor() {
                 return null;
             }
         });
-        assertEquals(BorderCallbacks.DEFAULT_WALL_COLOR, border.wallColor());
+        assertEquals(BorderTheme.DEFAULT_WALL_COLOR, border.wallColor());
     }
 }

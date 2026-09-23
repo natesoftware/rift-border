@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,7 +30,7 @@ class BorderPhaseControllerTimelineTest {
     private TestMocks.FakeScheduler scheduler;
     private Plugin plugin;
     private GameBorder border;
-    private RecordingCallbacks callbacks;
+    private RecordingEvents events;
     private BorderPhaseController controller;
     private int completions;
 
@@ -38,11 +38,11 @@ class BorderPhaseControllerTimelineTest {
     void setUp() {
         scheduler = new TestMocks.FakeScheduler();
         plugin = TestMocks.plugin(scheduler);
-        callbacks = new RecordingCallbacks();
-        border = new GameBorder(plugin, TestMocks.world(), 0, 64, 0).withCallbacks(callbacks);
+        events = new RecordingEvents();
+        border = new GameBorder(plugin, TestMocks.world(), 0, 64, 0).withEvents(events);
         border.setPosition(0, 0, INITIAL_RADIUS);
         controller = new BorderPhaseController(plugin, border, PHASES, MAP_X, MAP_Z, INITIAL_RADIUS).withFixedCenter(true);
-        controller.setOnAllPhasesComplete(() -> completions++);
+        controller.onAllPhasesComplete(() -> completions++);
     }
 
     @Test
@@ -50,8 +50,8 @@ class BorderPhaseControllerTimelineTest {
         controller.start(GAME_DURATION);
         assertEquals(0, controller.getCurrentPhase());
         assertFalse(controller.isShrinking());
-        assertEquals(List.of(new PhaseStart(1, 3, 60)), callbacks.phaseStarts);
-        assertEquals(0, callbacks.shrinkStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60)), events.phaseStarts);
+        assertEquals(0, events.shrinkStarts);
         assertEquals(new BorderPoint(MAP_X, MAP_Z), controller.getTargetCenter());
         assertEquals(100, controller.getTargetRadius(), EPS);
         assertEquals(1, scheduler.pending(), "one wait task and nothing else");
@@ -69,11 +69,11 @@ class BorderPhaseControllerTimelineTest {
         controller.start(GAME_DURATION);
         scheduler.advance(1199);
         assertFalse(controller.isShrinking());
-        assertEquals(0, callbacks.shrinkStarts);
+        assertEquals(0, events.shrinkStarts);
 
         scheduler.advance(1);
         assertTrue(controller.isShrinking());
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(1, events.shrinkStarts);
         assertEquals(30, controller.getSubPhaseRemaining());
         assertEquals(INITIAL_RADIUS, border.getRadius(), EPS, "the animator writes its first step on the following tick");
 
@@ -88,7 +88,7 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(MAP_Z, border.getCenterZ(), EPS);
         assertEquals(1, controller.getCurrentPhase());
         assertFalse(controller.isShrinking());
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 30)), callbacks.phaseStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 30)), events.phaseStarts);
         assertEquals(30, controller.getSubPhaseRemaining());
         assertEquals(50, controller.getTargetRadius(), EPS);
     }
@@ -110,8 +110,8 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(0, border.getRadius(), EPS);
         assertEquals(MAP_X, border.getCenterX(), EPS);
         assertEquals(
-            List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 30), new PhaseStart(3, 3, 15)), callbacks.phaseStarts);
-        assertEquals(3, callbacks.shrinkStarts);
+            List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 30), new PhaseStart(3, 3, 15)), events.phaseStarts);
+        assertEquals(3, events.shrinkStarts);
         assertEquals(0, scheduler.pending());
 
         scheduler.advance(2000);
@@ -124,7 +124,7 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(-1, controller.getCurrentPhase());
         assertEquals(0, controller.getSubPhaseRemaining());
         assertNull(controller.getTargetCenter());
-        assertTrue(callbacks.phaseStarts.isEmpty());
+        assertTrue(events.phaseStarts.isEmpty());
         assertEquals(0, scheduler.pending());
         assertEquals(INITIAL_RADIUS, border.getRadius(), EPS);
     }
@@ -142,7 +142,7 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(INITIAL_RADIUS, border.getRadius(), EPS);
         assertEquals(0, border.getCenterX(), EPS);
         assertEquals(0, border.getCenterZ(), EPS);
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 130)), callbacks.phaseStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 130)), events.phaseStarts);
         assertEquals(1, scheduler.pending(), "the in-flight shrink is cancelled and only the stretched wait remains");
 
         scheduler.advance(130 * 20 - 1);
@@ -162,12 +162,12 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(100, border.getRadius(), EPS);
         assertEquals(MAP_X, border.getCenterX(), EPS);
         assertEquals(MAP_Z, border.getCenterZ(), EPS);
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 15)), callbacks.phaseStarts);
-        assertEquals(0, callbacks.shrinkStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(2, 3, 15)), events.phaseStarts);
+        assertEquals(0, events.shrinkStarts);
 
         scheduler.advance(300);
         assertTrue(controller.isShrinking());
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(1, events.shrinkStarts);
         assertEquals(1, controller.getCurrentPhase());
     }
 
@@ -181,15 +181,15 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(100 + (50 - 100) * (10.0 / 30), border.getRadius(), EPS);
         assertEquals(MAP_X, border.getCenterX(), EPS);
         assertEquals(20, controller.getSubPhaseRemaining());
-        assertEquals(1, callbacks.shrinkStarts);
-        assertEquals(List.of(new PhaseStart(1, 3, 60)), callbacks.phaseStarts, "a shrink resync announces no new phase");
+        assertEquals(1, events.shrinkStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60)), events.phaseStarts, "a shrink resync announces no new phase");
 
         scheduler.advance(200);
         assertEquals(100 + (50 - 100) * (20.0 / 30), border.getRadius(), EPS);
         scheduler.advance(200);
         assertEquals(50, border.getRadius(), EPS);
         assertEquals(2, controller.getCurrentPhase());
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(3, 3, 15)), callbacks.phaseStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(3, 3, 15)), events.phaseStarts);
     }
 
     @Test
@@ -231,7 +231,7 @@ class BorderPhaseControllerTimelineTest {
         assertFalse(controller.isShrinking());
         scheduler.advance(1);
         assertTrue(controller.isShrinking());
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(1, events.shrinkStarts);
     }
 
     @Test
@@ -267,8 +267,8 @@ class BorderPhaseControllerTimelineTest {
         controller.stop();
         assertEquals(0, scheduler.pending());
         scheduler.advance(5000);
-        assertEquals(1, callbacks.phaseStarts.size());
-        assertEquals(0, callbacks.shrinkStarts);
+        assertEquals(1, events.phaseStarts.size());
+        assertEquals(0, events.shrinkStarts);
         assertEquals(0, completions);
         assertEquals(0, controller.getCurrentPhase(), "stop leaves the cursor where it was");
 
@@ -280,7 +280,7 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(0, controller.getCurrentPhase());
         assertFalse(controller.isShrinking());
         assertEquals(60, controller.getSubPhaseRemaining());
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), callbacks.phaseStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), events.phaseStarts);
         assertEquals(1, scheduler.pending());
         scheduler.advance(1200);
         assertTrue(controller.isShrinking());
@@ -298,7 +298,7 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(150, border.getRadius(), EPS);
         assertEquals(0, controller.getCurrentPhase());
         scheduler.advance(5000);
-        assertEquals(1, callbacks.phaseStarts.size());
+        assertEquals(1, events.phaseStarts.size());
         assertEquals(0, completions);
     }
 
@@ -312,8 +312,8 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(0, scheduler.pending());
         scheduler.advance(5000);
         assertEquals(INITIAL_RADIUS, border.getRadius(), EPS);
-        assertEquals(1, callbacks.phaseStarts.size());
-        assertEquals(0, callbacks.shrinkStarts);
+        assertEquals(1, events.phaseStarts.size());
+        assertEquals(0, events.shrinkStarts);
         assertEquals(0, completions);
         assertEquals(0, controller.getCurrentPhase());
     }
@@ -334,8 +334,8 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(0, second.getSubPhaseRemaining());
 
         scheduler.advance(5000);
-        assertEquals(0, callbacks.shrinkStarts, "the first controller's wait never lands, so it never begins its shrink");
-        assertEquals(1, callbacks.phaseStarts.size());
+        assertEquals(0, events.shrinkStarts, "the first controller's wait never lands, so it never begins its shrink");
+        assertEquals(1, events.phaseStarts.size());
         assertEquals(0, completions);
         assertEquals(INITIAL_RADIUS, border.getRadius(), EPS);
         assertEquals(0, controller.getCurrentPhase(), "the stopped first controller keeps its cursor");
@@ -348,10 +348,10 @@ class BorderPhaseControllerTimelineTest {
         second.start(GAME_DURATION);
         assertEquals(0, second.getCurrentPhase());
         assertEquals(1, scheduler.pending());
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), callbacks.phaseStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), events.phaseStarts);
         scheduler.advance(1200);
         assertTrue(second.isShrinking());
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(1, events.shrinkStarts);
         assertEquals(0, controller.getCurrentPhase());
         assertFalse(controller.isShrinking(), "the border now belongs to the second controller");
     }
@@ -375,8 +375,8 @@ class BorderPhaseControllerTimelineTest {
         assertFalse(controller.isShrinking());
         assertEquals(60, controller.getSubPhaseRemaining());
         assertEquals(new BorderPoint(MAP_X, MAP_Z), controller.getTargetCenter());
-        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), callbacks.phaseStarts);
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(List.of(new PhaseStart(1, 3, 60), new PhaseStart(1, 3, 60)), events.phaseStarts);
+        assertEquals(1, events.shrinkStarts);
 
         // the old shrink had 300 ticks left, so this crosses where it would have landed and advanced the phase - the new wait has 600 more
         scheduler.advance(600);
@@ -386,29 +386,29 @@ class BorderPhaseControllerTimelineTest {
         assertEquals(0, controller.getCurrentPhase());
         assertFalse(controller.isShrinking());
         assertEquals(30, controller.getSubPhaseRemaining());
-        assertEquals(2, callbacks.phaseStarts.size());
-        assertEquals(1, callbacks.shrinkStarts);
+        assertEquals(2, events.phaseStarts.size());
+        assertEquals(1, events.shrinkStarts);
         assertEquals(0, completions);
 
         scheduler.advance(600);
         assertTrue(controller.isShrinking());
-        assertEquals(2, callbacks.shrinkStarts);
+        assertEquals(2, events.shrinkStarts);
         assertEquals(0, controller.getCurrentPhase());
     }
 
     // Phase and shrink notifications in the order the controller fired them.
-    private static final class RecordingCallbacks implements BorderCallbacks {
+    private static final class RecordingEvents implements BorderEvents {
 
         final List<PhaseStart> phaseStarts = new ArrayList<>();
         int shrinkStarts;
 
         @Override
-        public void phaseStarted(int phase, int total, int waitSeconds) {
+        public void onPhaseStart(int phase, int total, int waitSeconds) {
             phaseStarts.add(new PhaseStart(phase, total, waitSeconds));
         }
 
         @Override
-        public void shrinkStarted() {
+        public void onShrinkStart() {
             shrinkStarts++;
         }
     }

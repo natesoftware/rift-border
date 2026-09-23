@@ -5,11 +5,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.natesoftware.riftborder.BorderCallbacks;
-import com.natesoftware.riftborder.BorderPhase;
-import com.natesoftware.riftborder.BorderPhaseController;
-import com.natesoftware.riftborder.GameBorder;
-import com.natesoftware.riftborder.NextBorderIndicator;
+import com.natesoftware.riftborder.api.BorderEvents;
+import com.natesoftware.riftborder.api.BorderPhase;
+import com.natesoftware.riftborder.api.BorderPhaseController;
+import com.natesoftware.riftborder.api.BorderTheme;
+import com.natesoftware.riftborder.api.GameBorder;
+import com.natesoftware.riftborder.api.NextBorderIndicator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -18,7 +19,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 // A complete consumer: one border around the first world, three phases, a target preview, and a clean teardown.
-// Needs the RiftBorder plugin on the server, which provides the library and picks each player's wall - compile against it only.
+// Needs the RiftBorder plugin on the server, which provides the library and picks each player's wall style - compile against it only.
 public final class ExamplePlugin extends JavaPlugin {
 
     // wait, shrink, end radius, damage per second
@@ -37,14 +38,15 @@ public final class ExamplePlugin extends JavaPlugin {
         for (Player player : world.getPlayers()) participants.add(player.getUniqueId());
 
         border = new GameBorder(this, world, 0, 64, 0)
-            .withCallbacks(new Callbacks())
+            .withTheme(new Theme())
+            .withEvents(new Events())
             .withParticipants(() -> participants);
         border.spawn(200);
 
         int scheduleSeconds = PHASES.stream().mapToInt(p -> p.waitSeconds() + p.shrinkSeconds()).sum();
         BorderPhaseController controller = new BorderPhaseController(this, border, PHASES, 0, 0, 200)
-            .withFixedCenter(true);
-        controller.setOnAllPhasesComplete(() -> getLogger().info("The border has closed"));
+            .withFixedCenter(true)
+            .onAllPhasesComplete(() -> getLogger().info("The border has closed"));
         controller.start(scheduleSeconds);
 
         new NextBorderIndicator(controller).start();
@@ -56,14 +58,16 @@ public final class ExamplePlugin extends JavaPlugin {
         if (border != null) border.remove();
     }
 
-    private static final class Callbacks implements BorderCallbacks {
+    private static final class Theme implements BorderTheme {
         @Override
         public Component warningTitle() {
             return Component.text("Get back inside", NamedTextColor.RED);
         }
+    }
 
+    private static final class Events implements BorderEvents {
         @Override
-        public void phaseStarted(int phase, int total, int waitSeconds) {
+        public void onPhaseStart(int phase, int total, int waitSeconds) {
             Bukkit.broadcast(Component.text("Border phase " + phase + "/" + total + " - closing in " + waitSeconds + "s"));
         }
     }

@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 /**
  * A horizontal position in the border's world, as world coordinates on the X and Z axes, not block-aligned. Returned by a

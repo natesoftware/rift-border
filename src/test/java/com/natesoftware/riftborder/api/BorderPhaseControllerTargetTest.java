@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 // Target resolution and clamping in BorderPhaseController, driven through a real controller on a real GameBorder.
-// The border is never spawned: the controller only needs callbacks, the scheduler and the live centre, so no registry is touched.
+// The border is never spawned: the controller only needs the scheduler and the live centre, so no registry is touched.
 class BorderPhaseControllerTargetTest {
 
     private static final double EPS = 1e-9;
@@ -47,7 +47,7 @@ class BorderPhaseControllerTargetTest {
     }
 
     private GameBorder newBorder() {
-        GameBorder b = new GameBorder(plugin, TestMocks.world(), 0, 64, 0).withCallbacks(new BorderCallbacks() {});
+        GameBorder b = new GameBorder(plugin, TestMocks.world(), 0, 64, 0);
         b.setPosition(0, 0, INITIAL_RADIUS);
         return b;
     }
@@ -193,7 +193,7 @@ class BorderPhaseControllerTargetTest {
             selections.incrementAndGet();
             return new BorderPoint(30, 40);
         });
-        controller.setOnAllPhasesComplete(completions::incrementAndGet);
+        controller.onAllPhasesComplete(completions::incrementAndGet);
 
         assertNull(controller.getTargetCenter());
         assertEquals(-1, controller.getTargetRadius(), EPS);

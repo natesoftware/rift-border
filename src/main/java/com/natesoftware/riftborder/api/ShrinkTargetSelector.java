@@ -1,4 +1,4 @@
-package com.natesoftware.riftborder;
+package com.natesoftware.riftborder.api;
 
 /**
  * Decides where each phase shrinks to. The controller clamps the answer so the new circle always fits inside the current one,
