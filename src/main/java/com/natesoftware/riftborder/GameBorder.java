@@ -1,13 +1,16 @@
 package com.natesoftware.riftborder;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.bukkit.Color;
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.ServicesManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +22,11 @@ import org.slf4j.LoggerFactory;
  * {@link #setPosition(double, double, double)} and the pause and resume methods, or by a {@link BorderPhaseController} that walks
  * it through a schedule of {@link BorderPhase}s and owns the shape while it runs.
  * <p>
- * While active the border renders its wall to every player in the world and tracks the players it applies to. With the
- * rift-border resource pack, declared with {@link #withShaderWall()}, the wall is a shader cylinder mounted on a grid of invisible
- * {@code ItemDisplay} anchors around the construction centre, each player being shown the anchor nearest them, and a per-player
- * resolver may switch individuals to a particle wall instead. Without it everyone gets particles. Both walls take their colour
+ * While active the border renders its wall to every player in the world and tracks the players it applies to. Where the
+ * rift-border resource pack is available, which the RiftBorder plugin reports through {@link BorderEnvironment} or a host can
+ * force with {@link #withShaderWall()}, the wall is a shader cylinder mounted on a grid of invisible {@code ItemDisplay} anchors
+ * around the construction centre, each player being shown the anchor nearest them, and players whose client has not loaded
+ * the pack, or who chose particles, see a particle wall instead. Without the pack everyone gets particles. Both walls take their colour
  * from {@link BorderCallbacks#wallColor()}. The damage tracker runs every tick from spawn to removal regardless of the damage
  * rate, warning, sounding and hurting anyone outside the radius, above the ceiling or below the floor, with the branding and
  * hooks supplied through {@link BorderCallbacks}. Every task runs on the main thread and every method expects to be called from
@@ -31,6 +35,9 @@ import org.slf4j.LoggerFactory;
 public class GameBorder {
 
     private static final Logger log = LoggerFactory.getLogger(GameBorder.class);
+
+    // Every border spawned and not yet removed, across every host sharing this copy of the library, in spawn order.
+    private static final List<GameBorder> ACTIVE = new CopyOnWriteArrayList<>();
 
     /**
      * Sentinel ceiling meaning the border has no upper bound, {@code Double.MAX_VALUE}. It is what {@link #getMaxHeight()} reports
@@ -85,7 +92,10 @@ public class GameBorder {
     BorderPhaseController controller;
     // Registered by NextBorderIndicator for the same reason.
     NextBorderIndicator indicator;
-    Function<UUID, BorderRenderMode> renderModeResolver = uuid -> BorderRenderMode.SHADER;
+    // Null means the host set none: the environment decides, or everyone gets SHADER without one.
+    Function<UUID, BorderRenderMode> renderModeResolver;
+    // The RiftBorder plugin's environment, looked up at spawn, or null without it.
+    BorderEnvironment environment;
 
     final BorderRenderer renderer;
     final ParticleBorderRenderer particleRenderer;
@@ -97,8 +107,8 @@ public class GameBorder {
     // Set by withShaderWall(). The server's players have the rift-border pack, so the shader wall has something to draw.
     boolean shaderWall;
 
-    // Snapshot of shaderWall taken at spawn, so a late withShaderWall() cannot claim a display grid that was never spawned.
-    private boolean packConfigured;
+    // Resolved at spawn from shaderWall and the environment, so a late opt-in cannot claim a display grid that was never spawned.
+    boolean packConfigured;
 
     /**
      * Creates an inactive border for world centred at (centerX, centerZ). centerY is the height the wall's display geometry is
@@ -162,9 +172,9 @@ public class GameBorder {
     /**
      * Per-player choice between the shader wall and the particle wall, consulted with the player's UUID on every visibility pass,
      * every 10 ticks, and every particle pass, every 40 ticks, so a player can switch mid-game. A null answer means
-     * {@link BorderRenderMode#SHADER}, which is also what the default resolver answers for everyone. resolver itself must not be
-     * null. It is never consulted unless the border was spawned with {@link #withShaderWall()}, since
-     * {@link BorderRenderMode#PARTICLE} is otherwise forced for every player. Returns this for chaining.
+     * {@link BorderRenderMode#SHADER}. Setting one replaces the {@link BorderEnvironment}'s per-player choice for this border,
+     * and null restores it, or SHADER for everyone when there is no environment. It is never consulted while the shader wall is
+     * off, since {@link BorderRenderMode#PARTICLE} is then forced for every player. Returns this for chaining.
      */
     public GameBorder withRenderModeResolver(Function<UUID, BorderRenderMode> resolver) {
         this.renderModeResolver = resolver;
@@ -172,12 +182,11 @@ public class GameBorder {
     }
 
     /**
-     * Declares that this server's players have the rift-border resource pack, so the wall is drawn as the shader cylinder. Without
-     * it the border renders as particles for everyone, which needs nothing on the client. With it, {@link #spawn(double)} mounts
-     * the display anchor grid, colours it with {@link BorderCallbacks#wallColor()}, and every player defaults to
-     * {@link BorderRenderMode#SHADER}, a resolver from {@link #withRenderModeResolver} still able to switch individuals to
-     * particles. Read at spawn, so on a border already active it takes effect only when the border is spawned again. Returns this
-     * for chaining.
+     * Forces the shader wall on, as if the server delivered the rift-border resource pack. Normally unnecessary: the RiftBorder
+     * plugin reports whether the pack is available through {@link BorderEnvironment}, and the border asks it at spawn. With the
+     * shader wall on, {@link #spawn(double)} mounts the display anchor grid and colours it with
+     * {@link BorderCallbacks#wallColor()}; without it the border renders as particles for everyone. Read at spawn, so on a border
+     * already active it takes effect only when the border is spawned again. Returns this for chaining.
      */
     public GameBorder withShaderWall() {
         this.shaderWall = true;
@@ -212,11 +221,30 @@ public class GameBorder {
         return this;
     }
 
-    // Render mode for a player, treating a null resolver result as SHADER. Without the shader wall everyone gets particles.
+    // Render mode for a player: the host's resolver, else the environment, else SHADER. Without the shader wall, particles.
     BorderRenderMode renderModeFor(UUID uuid) {
         if (!packConfigured) return BorderRenderMode.PARTICLE;
-        BorderRenderMode mode = renderModeResolver.apply(uuid);
+        BorderRenderMode mode = null;
+        if (renderModeResolver != null) {
+            mode = renderModeResolver.apply(uuid);
+        } else if (environment != null) {
+            mode = environment.renderModeFor(uuid);
+        }
         return mode != null ? mode : BorderRenderMode.SHADER;
+    }
+
+    // The RiftBorder plugin's environment, or null without it - every step null-safe.
+    private BorderEnvironment lookUpEnvironment() {
+        ServicesManager services = plugin.getServer() != null ? plugin.getServer().getServicesManager() : null;
+        return services != null ? services.load(BorderEnvironment.class) : null;
+    }
+
+    /**
+     * Every border currently spawned on this server, by any plugin sharing this copy of the library, in spawn order. A
+     * snapshot: borders spawned or removed afterwards do not change the returned list.
+     */
+    public static List<GameBorder> activeBorders() {
+        return List.copyOf(ACTIVE);
     }
 
     // The callbacks' wall colour, or the default for a null answer - the one colour both render modes draw.
@@ -304,6 +332,11 @@ public class GameBorder {
         return world;
     }
 
+    /** The plugin that created this border and owns its tasks and wall entities. */
+    public Plugin getPlugin() {
+        return plugin;
+    }
+
     /** Returns true when y is strictly above the current ceiling, and never for a finite y while there is no ceiling. */
     public boolean isAboveHeight(double y) {
         return y > maxHeight;
@@ -332,8 +365,9 @@ public class GameBorder {
 
     /**
      * Activates the border at initialRadius. The centre returns to the one given at construction and the ceiling and floor to
-     * none, so a border spawned again after {@link #remove()} does not keep the last phase's shape. Whether the shader wall is on
-     * is then read from {@link #withShaderWall()} and held until removal. When it is, spawn mounts the anchor grid around the
+     * none, so a border spawned again after {@link #remove()} does not keep the last phase's shape. The {@link BorderEnvironment}
+     * is then looked up, and the shader wall is on when {@link #withShaderWall()} was called or the environment reports the pack
+     * available, held until removal. When it is on, spawn mounts the anchor grid around the
      * construction centre, one invisible {@code ItemDisplay} per grid point with its chunk force-loaded, each carrying the pack's
      * wall model dyed with {@link BorderCallbacks#wallColor()}, arriving over the following ticks as chunks load, after sweeping
      * wall entities left behind by a border of this plugin that was never removed, and starts showing each player their nearest
@@ -359,13 +393,15 @@ public class GameBorder {
         this.maxHeight = NO_HEIGHT_LIMIT;
         this.minHeight = NO_MIN_HEIGHT;
         this.active = true;
-        this.packConfigured = shaderWall;
+        this.environment = lookUpEnvironment();
+        this.packConfigured = shaderWall || (environment != null && environment.shaderWallAvailable());
+        ACTIVE.add(this);
 
         // Without the pack the display grid would render nothing - skip it and leave every player on particles.
         if (packConfigured) {
             renderer.spawn();
         } else {
-            log.info("[GameBorder] Shader wall off - rendering the border as particles for every player (see withShaderWall())");
+            log.info("[GameBorder] No rift-border pack available - rendering the border as particles for every player");
         }
         particleRenderer.start();
         // Always tracked: the tracker owns the warning title, the enter sounds and the height indicators, not just damage.
@@ -379,10 +415,11 @@ public class GameBorder {
      * {@link #onShrinkComplete(Runnable)}, marks the border inactive, removes the wall entities and releases their force-loaded
      * chunks, stops the particle wall, and stops the damage tracker, which calls {@link BorderCallbacks#onWarningCleared(UUID)}
      * for everyone still outside, clears their warning title when one is configured, and stops the long-outside sound for those
-     * it had played to. The shape is left as it was, and so are both registrations. Safe to call when not active, and the border
-     * can be spawned again after.
+     * it had played to, and drops out of {@link #activeBorders()}. The shape is left as it was, and so are both registrations.
+     * Safe to call when not active, and the border can be spawned again after.
      */
     public void remove() {
+        ACTIVE.remove(this);
         if (controller != null) controller.stop();
         if (indicator != null) indicator.stop();
         animator.reset();

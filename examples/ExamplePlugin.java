@@ -18,7 +18,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 // A complete consumer: one border around the first world, three phases, a target preview, and a clean teardown.
-// Pack-less, so everyone sees the particle wall. Bundle rift-border into the jar as the README's Bundling section shows.
+// Needs the RiftBorder plugin on the server, which provides the library and picks each player's wall - compile against it only.
 public final class ExamplePlugin extends JavaPlugin {
 
     // wait, shrink, end radius, damage per second

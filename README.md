@@ -6,10 +6,11 @@ A volumetric circular border for Paper 1.21.11 servers. Renders a shrinkable
 cylinder, animates shape transitions, and damages players who stray outside the
 radius or beyond an optional ceiling / floor.
 
-Two render modes ship in the box. **Particles** need nothing but the jar and
-work on any client. **Shader** draws a solid cylinder wall via grid-mounted
-`ItemDisplay` entities and a custom item-model, and needs a resource pack
-(see [Rendering](#rendering)).
+This repository is the API you build against. On a server it runs as the
+**RiftBorder** plugin, which provides these classes to every plugin that uses
+them, delivers the resource pack that draws the solid shader wall, and gives
+players `/border` to choose their wall. RiftBorder is not published: message
+`Nateiwnl` on Discord for the jar.
 
 ## Features
 
@@ -18,7 +19,7 @@ work on any client. **Shader** draws a solid cylinder wall via grid-mounted
 - Optional multi-phase controller with pause / resume / sync-to-timer
 - Pluggable choice of where each phase shrinks to
 - Per-player damage with grace period, warning title, and re-entry sound
-- Per-player render mode, so players can pick particles or the shader wall
+- A solid shader wall or a particle wall per player, chosen for you by the plugin
 - Particle-ring preview of the next phase's target
 - One integration point (`BorderCallbacks`) for branding, messages, and sound
 
@@ -26,94 +27,38 @@ work on any client. **Shader** draws a solid cylinder wall via grid-mounted
 
 - Paper (or compatible fork) 1.21.11+
 - Java 21
-- A resource pack, **only** if you want the shader wall
+- The RiftBorder plugin installed on the server
 
-## Installation
+## Setup
 
-Coordinate `com.natesoftware:rift-border`, package `com.natesoftware.riftborder`.
-Not on Maven Central. Three options:
-
-### Composite build (recommended while iterating)
-
-Clone alongside your plugin:
-
-```
-your-workspace/
-├── rift-border/
-└── your-plugin/
-```
-
-`settings.gradle.kts`:
-```kotlin
-includeBuild("../rift-border")
-```
-
-`build.gradle.kts`:
-```kotlin
-dependencies {
-    implementation("com.natesoftware:rift-border:2.0.0")
-}
-```
-
-Source changes in `rift-border/` flow through to your plugin's next build with
-no publish step.
-
-### `mavenLocal()`
-
-```bash
-git clone git@github.com:natesoftware/rift-border.git
-cd rift-border
-./gradlew publishToMavenLocal
-```
-
-`build.gradle.kts`:
-```kotlin
-repositories {
-    mavenLocal()
-}
-dependencies {
-    implementation("com.natesoftware:rift-border:2.0.0")
-}
-```
-
-### JitPack
+1. Install `RiftBorder.jar` in the server's `plugins/` folder. Its
+   `config.yml` chooses how players get the pack (see [Rendering](#rendering)).
+2. Compile against the API without bundling it:
 
 ```kotlin
 repositories {
     maven("https://jitpack.io")
 }
 dependencies {
-    implementation("com.github.natesoftware:rift-border:v2.0.0")
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("com.github.natesoftware:rift-border:v2.1.0")
 }
 ```
 
-## Bundling
+3. Depend on the plugin in your `plugin.yml`:
 
-**This is a library, not a plugin.** Paper will not load it from the server
-classpath, so it has to be bundled into your plugin jar or you get a
-`NoClassDefFoundError` the first time a border spawns. Apply the Shadow plugin:
-
-```kotlin
-plugins {
-    id("com.gradleup.shadow") version "9.0.0"
-}
-
-tasks.jar { enabled = false }
-tasks.shadowJar { archiveClassifier.set("") }   // drop the -all suffix
-tasks.build { dependsOn(tasks.shadowJar) }
+```yaml
+depend: [RiftBorder]
 ```
 
-Keep the dependency as `implementation` and Shadow bundles it. Relocation is
-optional: rift-border has no transitive dependencies (`paper-api` is
-`compileOnly`, so the published POM is empty) and its only static state is a
-set of live border ids that is private to each plugin's bundled copy, so two
-plugins bundling it do not collide. Relocate it anyway if you want to pin a
-version independently of whatever else is on the server.
+**Do not shade or bundle the library.** RiftBorder provides it at runtime, so
+every plugin on the server shares one copy of these classes. That shared copy
+is how your borders find the pack and each player's wall choice with no wiring
+at all; a bundled copy would be cut off from it and show everyone particles.
 
-Shadow's version has to match your Gradle. `9.0.0` is verified on Gradle 9.0.0.
-Newer Shadow releases (9.6.x) fail at configuration time on Gradle 9.0.x with a
-missing `AdhocComponentWithVariants` method; if you want a newer Shadow, run a
-newer Gradle to go with it.
+Package `com.natesoftware.riftborder`. To build against local changes instead,
+clone this repo beside your plugin, add `includeBuild("../rift-border")` to
+`settings.gradle.kts`, and use `compileOnly("com.natesoftware:rift-border:2.1.0")`.
 
 ## Usage
 
@@ -256,28 +201,27 @@ and when they return.
 
 ## Rendering
 
-Each player is resolved to a `BorderRenderMode` on every visibility pass:
+Players see one of two walls:
 
-| Mode | Needs a pack | What it looks like |
-| --- | --- | --- |
-| `PARTICLE` | no | A dust wall on the arc nearest the player, density scaled to the current radius |
-| `SHADER` | yes | A solid cylinder wall, drawn by the pack's item-model |
+| Wall | What it looks like |
+| --- | --- |
+| Shader | A solid cylinder wall, drawn by the rift-border resource pack |
+| Particles | A dust wall on the arc nearest the player, density scaled to the current radius |
 
-**With no pack, you get particles and nothing else to configure.** Every
-player is on `PARTICLE`, the display grid is skipped entirely, and spawn logs
-one line saying so.
+**You configure nothing.** The RiftBorder plugin decides per player: anyone
+whose client loaded the pack sees the shader wall, anyone who declined it or
+chose `/border particle` sees particles. Both walls take their colour from
+`wallColor()` on your callbacks (aqua `#55FFFF` by default). The particle wall
+picks up a change within two seconds; the shader wall reads it at spawn.
 
-If your players have the rift-border pack, turn the shader wall on. Every
-player then defaults to `SHADER`; supply a resolver to let them choose:
+The server owner chooses how the pack reaches players in RiftBorder's
+`config.yml`: served from the server itself, downloaded from a URL, or carried
+inside another plugin's pack.
 
-```java
-border.withShaderWall()
-      .withRenderModeResolver(uuid -> preferences.renderMode(uuid));
-```
-
-Both walls take their colour from `wallColor()` on your callbacks (aqua
-`#55FFFF` by default). The particle wall picks up a change within two seconds;
-the shader wall reads it at spawn.
+Two overrides exist for special cases. `withShaderWall()` forces the shader
+wall on, and `withRenderModeResolver(uuid -> ...)` replaces the per-player
+choice for one border. `BorderEnvironment.get()` exposes the plugin's side,
+including each player's choice, for a settings menu of your own.
 
 Shader mode mounts its wall on an anchor grid: one invisible display every 80
 blocks, out to 500 blocks from the centre. A radius past that cap renders no
@@ -299,11 +243,9 @@ geometry reaches the shader through the display's scale: **X and Y carry the
 live radius, Z carries the pattern-anchor radius** (the transition target while
 shrinking, so the pattern does not slide mid-shrink).
 
-The pack that implements this contract is not published. Particle mode is the
-supported path for third parties today; a future plugin release will bundle
-and serve the pack itself. Until then, message `Nateiwnl` on Discord if you
-want it, or write your own against the contract above under the same
-`rift-border:border` key.
+The pack that implements this contract ships inside RiftBorder. To draw a
+wall of your own instead, build a pack against the contract above under the
+same `rift-border:border` key.
 
 ## Example
 
@@ -311,7 +253,7 @@ want it, or write your own against the contract above under the same
 plugin assembled from the snippets above: it spawns a border around the first
 world on enable, drives it through three phases, previews each target, and
 tears everything down on disable. Drop it into a project set up per
-[Bundling](#bundling) with the `plugin.yml` beside it.
+[Setup](#setup) with the `plugin.yml` beside it.
 
 ## Development
 
