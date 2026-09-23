@@ -22,9 +22,10 @@ import org.slf4j.LoggerFactory;
  * Where each phase lands is resolved lazily, one phase at a time: under natural progression as the phase's wait begins, or on
  * demand by a resync for every not-yet-placed phase up to the one it lands in, in order. The selector's answer is clamped along
  * its ray from the circle the phase shrinks from so each circle nests in the previous one. Phase 1 shrinks from the border
- * centre snapshotted at {@link #start(int)} and the constructor's initialRadius, later phases from the previous phase's resolved
- * target and end radius. The schedule is laid out against a game clock counting down in seconds from the value given to
- * {@link #start(int)}, which is what {@link #syncToGameTimer(int)} realigns against.
+ * centre snapshotted at {@link #start(int)} and the starting radius, later phases from the previous phase's resolved target and
+ * end radius. The schedule is laid out against a game clock counting down in seconds from the value given to
+ * {@link #start(int)}, which is what {@link #syncToGameTimer(int)} realigns against. {@link #start()} runs that clock for exactly
+ * {@link BorderPhase#totalSeconds(List)}, so a host timer set to the same total stays one to one with the border.
  * <p>
  * Constructing one registers it on the border, displacing and stopping any controller registered there before it, so
  * {@link GameBorder#remove()} stops it and the border's shrink completion advances it through a slot separate from the host's
@@ -41,7 +42,9 @@ public class BorderPhaseController {
     private final List<BorderPhase> phases;
     private final double mapCenterX;
     private final double mapCenterZ;
-    private final double initialRadius;
+    // True for the short constructor: start() then reads the starting radius off the border instead of trusting a given one.
+    private final boolean radiusFromBorder;
+    private double initialRadius;
 
     private ShrinkTargetSelector targetSelector = ShrinkTargetSelector.RANDOM_INSIDE;
     private Random random = new Random();
@@ -84,7 +87,7 @@ public class BorderPhaseController {
      * there is stopped as {@link #stop()} describes, so neither its pending wait nor its in-flight shrink keeps driving a border
      * it no longer owns; the border's shrink completion then advances only this controller, so the displaced one is not to be
      * started again. The selector defaults to {@link ShrinkTargetSelector#RANDOM_INSIDE} with an unseeded random. Nothing runs
-     * until start.
+     * until start. {@link #BorderPhaseController(Plugin, GameBorder, List)} takes all three values from the border instead.
      */
     public BorderPhaseController(
         Plugin plugin,
@@ -93,12 +96,33 @@ public class BorderPhaseController {
         double mapCenterX,
         double mapCenterZ,
         double initialRadius) {
+        this(plugin, border, phases, mapCenterX, mapCenterZ, initialRadius, false);
+    }
+
+    /**
+     * Creates a controller that takes its map centre and starting radius from the border itself: the map centre is the centre the
+     * border was constructed with, and the starting radius is the border's radius when {@link #start(int)} runs, so spawn the
+     * border first. Otherwise identical to {@link #BorderPhaseController(Plugin, GameBorder, List, double, double, double)}.
+     */
+    public BorderPhaseController(Plugin plugin, GameBorder border, List<BorderPhase> phases) {
+        this(plugin, border, phases, border.initialCenterX, border.initialCenterZ, 0, true);
+    }
+
+    private BorderPhaseController(
+        Plugin plugin,
+        GameBorder border,
+        List<BorderPhase> phases,
+        double mapCenterX,
+        double mapCenterZ,
+        double initialRadius,
+        boolean radiusFromBorder) {
         this.plugin = plugin;
         this.border = border;
         this.phases = List.copyOf(phases);
         this.mapCenterX = mapCenterX;
         this.mapCenterZ = mapCenterZ;
         this.initialRadius = initialRadius;
+        this.radiusFromBorder = radiusFromBorder;
         // A controller already driving this border is stopped first, so its wait task cannot keep moving a border it no longer owns.
         if (border.controller != null && border.controller != this) border.controller.stop();
         border.controller = this;
@@ -140,11 +164,21 @@ public class BorderPhaseController {
     }
 
     /**
+     * Begins phase progression against a game clock exactly as long as the schedule, {@link BorderPhase#totalSeconds(List)}. The
+     * usual start: give the host's own round timer the same total and the two stay one to one. Otherwise as {@link #start(int)}.
+     */
+    public void start() {
+        start(BorderPhase.totalSeconds(phases));
+    }
+
+    /**
      * Begins phase progression against a game clock of gameDuration seconds, entering phase 1's wait immediately: its target is
      * resolved, its damage rate applied to the border, {@link BorderEvents#onPhaseStart(int, int, int)} and
      * {@link BorderEvents#playPhaseSound()} called synchronously, and the wait scheduled. The border's centre at this moment
-     * is snapshotted as the circle phase 1 shrinks from, together with the constructor's initialRadius, and while the border is
-     * active a live radius that differs from initialRadius is logged as a warning, since the clamp uses initialRadius regardless.
+     * is snapshotted as the circle phase 1 shrinks from, together with the starting radius: the border's live radius for a
+     * controller built with the short constructor, otherwise the constructor's initialRadius, in which case a live radius that
+     * differs from it while the border is active is logged as a warning, since the clamp uses initialRadius regardless. A game
+     * clock longer than the schedule suits a host whose round outlasts the border's phases.
      * Calling it again, including after {@link #stop()}, restarts from phase 1 with fresh targets and an unpaused state, cancelling
      * the previous run's pending wait and freezing any transition still in flight, the previous run's shrink included, where it is
      * without firing its completion, but not moving the border back, so phase 1 then shrinks from wherever the border now sits. An
@@ -162,7 +196,10 @@ public class BorderPhaseController {
         border.animator.reset();
         startCenterX = border.getCenterX();
         startCenterZ = border.getCenterZ();
-        if (border.isActive() && border.getRadius() != initialRadius) {
+        if (radiusFromBorder) {
+            initialRadius = border.getRadius();
+            if (initialRadius <= 0) log.warn("[BorderPhase] start() read a radius of 0 from the border - spawn it before starting");
+        } else if (border.isActive() && border.getRadius() != initialRadius) {
             log.warn("[BorderPhase] initialRadius {} does not match the live border radius {} - phase 1 will clamp against {}",
                 initialRadius, border.getRadius(), initialRadius);
         }

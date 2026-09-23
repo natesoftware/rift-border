@@ -43,11 +43,10 @@ public final class ExamplePlugin extends JavaPlugin {
             .withParticipants(() -> participants);
         border.spawn(200);
 
-        int scheduleSeconds = PHASES.stream().mapToInt(p -> p.waitSeconds() + p.shrinkSeconds()).sum();
-        BorderPhaseController controller = new BorderPhaseController(this, border, PHASES, 0, 0, 200)
+        BorderPhaseController controller = new BorderPhaseController(this, border, PHASES)
             .withFixedCenter(true)
             .onAllPhasesComplete(() -> getLogger().info("The border has closed"));
-        controller.start(scheduleSeconds);
+        controller.start();
 
         new NextBorderIndicator(controller).start();
     }

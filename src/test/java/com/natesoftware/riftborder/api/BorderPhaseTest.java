@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 class BorderPhaseTest {
@@ -24,6 +26,15 @@ class BorderPhaseTest {
         BorderPhase phase = new BorderPhase(60, 30, 100, 2.0, 120);
         assertEquals(120, phase.endHeight());
         assertEquals(GameBorder.NO_MIN_HEIGHT, phase.endMinHeight());
+    }
+
+    @Test
+    void totalSecondsAddsEveryWaitAndShrink() {
+        assertEquals(180, BorderPhase.totalSeconds(List.of(
+            new BorderPhase(60, 30, 100, 2.0),
+            new BorderPhase(30, 30, 50, 2.0),
+            new BorderPhase(15, 15, 0, 2.0))));
+        assertEquals(0, BorderPhase.totalSeconds(List.of()));
     }
 
     @Test

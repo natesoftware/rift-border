@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border-api:v3.0.0")
+    compileOnly("com.github.natesoftware:rift-border-api:v3.1.0")
 }
 ```
 
@@ -59,7 +59,7 @@ at all; a bundled copy would be cut off from it and show everyone particles.
 Package `com.natesoftware.riftborder.api`. To build against local changes
 instead, clone this repo beside your plugin, add
 `includeBuild("../rift-border-api")` to `settings.gradle.kts`, and use
-`compileOnly("com.natesoftware:rift-border-api:3.0.0")`.
+`compileOnly("com.natesoftware:rift-border-api:3.1.0")`.
 
 ## Usage
 
@@ -106,19 +106,23 @@ List<BorderPhase> phases = List.of(
     new BorderPhase(30, 30, 50,  3.0),
     new BorderPhase(15, 15, 0,   5.0));
 
-BorderPhaseController controller =
-    new BorderPhaseController(plugin, border, phases, mapCenterX, mapCenterZ, 200);
-controller.start(gameDurationSeconds);
+BorderPhaseController controller = new BorderPhaseController(plugin, border, phases);
+controller.start();   // runs for exactly BorderPhase.totalSeconds(phases)
 
 // Optional: pulse a faint ring where the next phase will land
 NextBorderIndicator indicator = new NextBorderIndicator(controller);
 indicator.start();
 ```
 
-`gameDurationSeconds` is the clock every later `setRemainingSeconds` reading is
-measured against. Under natural progression it only needs to cover the
-schedule (the sum of every phase's wait and shrink); pass your own round
-length if you sync to a game timer.
+The controller takes the map centre and starting radius from the border, so
+spawn the border before `start()`. `start()` runs the controller's clock for
+exactly the schedule's length, `BorderPhase.totalSeconds(phases)` (every
+phase's wait plus its shrink). Give your own round timer that same number and
+the two stay one to one: every later `setRemainingSeconds` lines them up again.
+
+Two longer forms exist for other cases. `start(seconds)` runs a longer clock,
+for a round that outlasts the border's phases. The six-argument constructor
+takes a map centre other than the border's own, and a starting radius.
 
 `BorderPhase` has longer constructors that add a ceiling Y and a floor Y for
 that phase. Do not also call `moveTo` yourself while a controller is running;

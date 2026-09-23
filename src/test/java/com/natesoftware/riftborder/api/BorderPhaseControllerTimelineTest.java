@@ -46,6 +46,28 @@ class BorderPhaseControllerTimelineTest {
     }
 
     @Test
+    void theShortFormTakesTheMapCentreAndStartingRadiusFromTheBorderAndRunsTheScheduleLength() {
+        GameBorder own = new GameBorder(plugin, TestMocks.world(), MAP_X, 64, MAP_Z);
+        own.setPosition(MAP_X, MAP_Z, 150);
+        BorderPhaseController shortForm = new BorderPhaseController(plugin, own, PHASES).withFixedCenter(true);
+        shortForm.start();
+
+        // the map centre FIXED_CENTER aims at is the border's own construction centre
+        assertEquals(new BorderPoint(MAP_X, MAP_Z), shortForm.getTargetCenter());
+
+        // a resync to the full schedule length lands back on phase 1's wait, snapping the border to the radius read at start
+        own.setPosition(0, 0, 999);
+        shortForm.syncToGameTimer(BorderPhase.totalSeconds(PHASES));
+        assertEquals(0, shortForm.getCurrentPhase());
+        assertEquals(150, own.getRadius(), EPS);
+
+        // the clock is the schedule's own length: 90 seconds left is exactly phase 2's wait with 30 to go
+        shortForm.syncToGameTimer(90);
+        assertEquals(1, shortForm.getCurrentPhase());
+        assertEquals(30, shortForm.getSubPhaseRemaining());
+    }
+
+    @Test
     void startEntersPhaseOneWaitAndCountsDownByCeilingDivision() {
         controller.start(GAME_DURATION);
         assertEquals(0, controller.getCurrentPhase());
