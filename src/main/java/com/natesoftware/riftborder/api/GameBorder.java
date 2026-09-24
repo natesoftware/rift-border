@@ -186,7 +186,7 @@ public class GameBorder {
 
     /**
      * Decides each player's {@link WallStyle} for this border alone, consulted with the player's UUID on every visibility pass,
-     * every 10 ticks, and every particle pass, every 40 ticks, so a player can switch mid-game. A null answer means
+     * every 10 ticks, and every particle pass, every 20 ticks, so a player can switch mid-game. A null answer means
      * {@link WallStyle#SHADER}. Setting one overrides the styles players chose through {@link WallStyles} for this border, and
      * null hands the choice back to them, or gives everyone SHADER when the RiftBorder plugin is not installed. It is never
      * consulted while the shader wall is off, since {@link WallStyle#PARTICLE} is then forced for every player. Returns this for
@@ -402,7 +402,7 @@ public class GameBorder {
      * wall entities left behind by a border of this plugin that was never removed, and starts showing each player their nearest
      * anchor. When it is not, spawn skips the grid entirely, logs one line, and forces {@link WallStyle#PARTICLE} for
      * everyone without consulting the resolver. The particle renderer starts either way,
-     * serving players on the particle style every 40 ticks. The damage tracker also always starts, reading the warning subtitle and
+     * serving players on the particle style every 20 ticks. The damage tracker also always starts, reading the warning subtitle and
      * sound keys from the theme once: from then on every tick classifies each participating survival or adventure player as inside
      * or outside, warns, plays the sounds, every 40 ticks pulses red dust on the ceiling or floor plane around participants
      * inside the radius and within 10 blocks of that plane in any game mode, and deals the configured damage every 20 ticks after

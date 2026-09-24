@@ -10,9 +10,8 @@ import org.bukkit.scheduler.BukkitTask;
 // every pass because the radius and center animate continuously during shrinks.
 final class ParticleBorderRenderer {
 
-    // Refresh cadence, shared with the other border particle cues; dust lives about a second, so
-    // the wall pulses gently between passes.
-    private static final int UPDATE_INTERVAL_TICKS = 40;
+    // Once a second: close to the dust's own lifespan, so the wall reads as steady, and a shrink moves it in one-second steps.
+    private static final int UPDATE_INTERVAL_TICKS = 20;
     // The grid is tuned by the border's current radius alone: tight endgame zones get a dense fine
     // grid, wide early-game zones a sparse bold one. Uniform square grid per pass, both axes.
     private static final double RADIUS_DENSE = 32.0;    // at or below this radius the grid is densest

@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border-api:v4.0.0")
+    compileOnly("com.github.natesoftware:rift-border-api:v4.0.1")
 }
 ```
 
@@ -59,7 +59,7 @@ at all; a bundled copy would be cut off from it and show everyone particles.
 Package `com.natesoftware.riftborder.api`. To build against local changes
 instead, clone this repo beside your plugin, add
 `includeBuild("../rift-border-api")` to `settings.gradle.kts`, and use
-`compileOnly("com.natesoftware:rift-border-api:4.0.0")`.
+`compileOnly("com.natesoftware:rift-border-api:4.0.1")`.
 
 ## Usage
 
@@ -229,7 +229,7 @@ Each player sees one of two wall styles (`WallStyle`):
 whose client loaded the pack sees the shader wall, anyone who declined it or
 chose `/border particle` sees particles. Both take their colour from
 `wallColor()` on your theme (aqua `#55FFFF` by default), and both follow a
-change within two seconds while the border is live. Return a `shrinkColor()` as
+change within a second while the border is live. Return a `shrinkColor()` as
 well and the wall switches to it while the border is moving, and back once it
 lands.
 

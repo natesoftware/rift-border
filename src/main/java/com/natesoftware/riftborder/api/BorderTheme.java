@@ -60,7 +60,7 @@ public interface BorderTheme {
      * Colour of the border wall in both wall styles: the dust of the particle wall, and the tint of the shader wall, whose
      * display items carry it as their dyed colour for the pack to tint from. Both follow a change while the border is live: the
      * shader wall checks every 10 ticks and re-dyes its displays when the answer differs, the particle wall reads it on every
-     * pass, every 40 ticks. Return a stored value rather than building one per call. A null answer draws
+     * pass, every 20 ticks. Return a stored value rather than building one per call. A null answer draws
      * {@link #DEFAULT_WALL_COLOR}, which is also the default.
      */
     default Color wallColor() {
@@ -71,7 +71,7 @@ public interface BorderTheme {
      * Colour the wall switches to while the border is moving - shrinking, growing or re-centring, from
      * {@link GameBorder#moveTo(double, double, double, int)} or a {@link BorderPhaseController} shrink - and back from once it
      * lands or pauses. The shader wall switches on the first tick of the move and back within 10 ticks of it ending; the
-     * particle wall on its next pass, every 40 ticks. Null keeps {@link #wallColor()} throughout, which is the default.
+     * particle wall on its next pass, every 20 ticks. Null keeps {@link #wallColor()} throughout, which is the default.
      */
     default Color shrinkColor() {
         return null;

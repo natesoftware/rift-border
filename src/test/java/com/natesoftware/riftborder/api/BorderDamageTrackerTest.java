@@ -91,7 +91,7 @@ class BorderDamageTrackerTest {
         tracker.clock = () -> clockMs[0];
         moveTo(0, 64, 0);
         border.spawn(100);
-        // the particle wall is not under test, and its 40-tick pass would reach Particle.DUST, a registry-backed enum
+        // the particle wall is not under test, and its 20-tick pass would reach Particle.DUST, a registry-backed enum
         border.particleRenderer.stop();
     }
 
