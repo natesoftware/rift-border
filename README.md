@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border-api:v4.0.1")
+    compileOnly("com.github.natesoftware:rift-border-api:v4.1.0")
 }
 ```
 
@@ -59,7 +59,7 @@ at all; a bundled copy would be cut off from it and show everyone particles.
 Package `com.natesoftware.riftborder.api`. To build against local changes
 instead, clone this repo beside your plugin, add
 `includeBuild("../rift-border-api")` to `settings.gradle.kts`, and use
-`compileOnly("com.natesoftware:rift-border-api:4.0.1")`.
+`compileOnly("com.natesoftware:rift-border-api:4.1.0")`.
 
 ## Usage
 
@@ -165,10 +165,9 @@ Always tear down when the match ends and on plugin disable:
 border.remove();      // also stops any controller and indicator attached to it
 ```
 
-With the shader wall on, the border force-loads the chunks holding its wall
-anchors while it is active. Those flags are saved with the world, so skipping
-`remove()` leaves the chunks pinned loaded across restarts. The particle wall
-force-loads nothing.
+`remove()` takes every viewer's wall display down. The displays are never saved
+with the world and the border loads no chunks of its own, so a server that
+stops without it leaves nothing behind for the next start.
 
 ### Theme and events
 
@@ -243,20 +242,19 @@ for one border. `WallStyles.get()` is the plugin's side: whether the shader
 wall is available, and each player's chosen style, for a settings menu of your
 own.
 
-The shader wall is mounted on an anchor grid: one invisible display every 80
-blocks, out to 500 blocks from the centre. A radius past that cap renders no
-wall on its far side and logs a warning at spawn. Both numbers are tunable:
-
-```java
-border.withGrid(80, 1200)   // spacing, max extent
-      .withAnchorY(200);    // where the anchors sit; defaults to just under the build limit
-```
+The shader wall is mounted on one invisible display per viewer, spawned where
+they stand and shown to them alone, since any single display draws the whole
+cylinder. A player who moves more than 32 blocks from theirs gets a fresh one
+where they stand. There is no radius cap and no chunk loading.
+`withAnchorY(y)` sets the height the displays sit at; it defaults to just under
+the build limit, in open sky light. `withGrid` sized the old fixed grid of
+displays and does nothing since 4.1.0.
 
 ### Pack contract
 
 The wall is a `Material.PAPER` `ItemStack` with the item model
 `rift-border:border`, dyed with the theme's `wallColor()`, carried by
-`ItemDisplay` entities on an 80-block grid. The pack's item definition tints
+an `ItemDisplay` kept near each viewer. The pack's item definition tints
 from that dyed colour, the model is expanded into a cylinder by a core-shader
 override that colours the wall from the tint, and the border's
 geometry reaches the shader through the display's scale: **X and Y carry the

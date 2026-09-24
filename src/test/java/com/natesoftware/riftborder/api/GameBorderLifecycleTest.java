@@ -14,7 +14,7 @@ import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-// Spawn and remove without the shader wall: the display grid is skipped and only the particle
+// Spawn and remove without the shader wall: no wall displays are spawned and only the particle
 // and damage tasks run. Nothing here reaches a Bukkit registry.
 class GameBorderLifecycleTest {
 
@@ -94,7 +94,7 @@ class GameBorderLifecycleTest {
         border.withWallStyleResolver(uuid -> WallStyle.SHADER);
         border.spawn(100);
         border.withShaderWall();
-        // no display grid was spawned, so the live border must keep everyone on particles
+        // no wall displays were spawned, so the live border must keep everyone on particles
         assertEquals(WallStyle.PARTICLE, border.styleFor(UUID.randomUUID()));
     }
 

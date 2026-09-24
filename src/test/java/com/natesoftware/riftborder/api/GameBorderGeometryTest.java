@@ -3,7 +3,6 @@ package com.natesoftware.riftborder.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -68,14 +67,25 @@ class GameBorderGeometryTest {
         assertEquals(255, new GameBorder(plugin, shortWorld, 0, 64, 0).anchorY);
     }
 
+    // Callers built against 4.0 and earlier still call withGrid, and it must neither throw nor change anything.
     @Test
-    void gridBuilderRejectsNonPositiveValues() {
+    @SuppressWarnings("removal")
+    void theDeprecatedGridBuilderIsANoOp() {
         GameBorder border = new GameBorder(plugin, world, 0, 64, 0);
-        assertThrows(IllegalArgumentException.class, () -> border.withGrid(0, 500));
-        assertThrows(IllegalArgumentException.class, () -> border.withGrid(80, -1));
-        border.withGrid(40, 1000);
-        assertEquals(40, border.gridSpacing);
-        assertEquals(1000, border.gridMaxExtent);
+        assertSame(border, border.withGrid(0, -1));
+        assertSame(border, border.withGrid(80, 1200));
+        assertEquals(319, border.anchorY);
+    }
+
+    @Test
+    void aViewerGetsAFreshDisplayOnlyPastTheReanchorDistance() {
+        double r = BorderRenderer.REANCHOR_DISTANCE;
+        assertFalse(BorderRenderer.needsNewAnchor(0, 0, 0, 0));
+        assertFalse(BorderRenderer.needsNewAnchor(0, 0, r, 0), "exactly at the distance keeps the display");
+        assertTrue(BorderRenderer.needsNewAnchor(0, 0, r + 0.01, 0));
+        // horizontal distance only: a diagonal walk counts both axes
+        assertFalse(BorderRenderer.needsNewAnchor(100, -50, 100 + 22, -50 + 22));
+        assertTrue(BorderRenderer.needsNewAnchor(100, -50, 100 + 23, -50 + 23));
     }
 
     @Test

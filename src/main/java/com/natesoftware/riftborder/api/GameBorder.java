@@ -25,9 +25,9 @@ import org.slf4j.LoggerFactory;
  * <p>
  * While active the border renders its wall to every player in the world and tracks the players it applies to. Where the
  * rift-border resource pack is available, which the RiftBorder plugin reports through {@link WallStyles} or a host can
- * force with {@link #withShaderWall()}, the wall is a shader cylinder mounted on a grid of invisible {@code ItemDisplay} anchors
- * around the construction centre, each player being shown the anchor nearest them, and players whose client has not loaded
- * the pack, or who chose particles, see a particle wall instead. Without the pack everyone gets particles. Both walls take their
+ * force with {@link #withShaderWall()}, the wall is a shader cylinder mounted on an invisible {@code ItemDisplay} kept near
+ * each player and shown to them alone, and players whose client has not loaded the pack, or who chose particles, see a particle
+ * wall instead. Without the pack everyone gets particles. Both walls take their
  * colour from {@link BorderTheme#wallColor()}. The damage tracker runs every tick from spawn to removal regardless of the damage
  * rate, warning, sounding and hurting anyone outside the radius, above the ceiling or below the floor, styled by the
  * {@link BorderTheme} and reporting through the {@link BorderEvents}. Every task runs on the main thread and every method
@@ -82,9 +82,7 @@ public class GameBorder {
     // Stamped on this border's wall entities so an orphan sweep can tell them apart from another live border's.
     final UUID id = UUID.randomUUID();
 
-    // Wall anchor grid: spacing between the display entities, the hard cap on the grid's half-extent, and the Y they sit at.
-    int gridSpacing = 80;
-    int gridMaxExtent = 500;
+    // The Y each viewer's wall display sits at.
     int anchorY;
 
     Supplier<Set<UUID>> participantSupplier;
@@ -112,16 +110,15 @@ public class GameBorder {
     // Set by withShaderWall(). The server's players have the rift-border pack, so the shader wall has something to draw.
     boolean shaderWall;
 
-    // Resolved at spawn from shaderWall and the WallStyles, so a late opt-in cannot claim a display grid that was never spawned.
+    // Resolved at spawn from shaderWall and the WallStyles, so a late opt-in cannot claim wall displays that were never spawned.
     boolean packConfigured;
 
     /**
      * Creates an inactive border for world centred at (centerX, centerZ). centerY is the height the wall's display geometry is
      * centred on and is fixed for the border's life, while the horizontal centre moves with every transition and returns to
      * these values on each {@link #spawn(double)}. plugin owns every task and wall entity the border creates. The radius is 0
-     * until spawn or a shape call sets it, and there is no ceiling or floor until a shape call sets one. Wall anchors default to
-     * a Y of 319 or the world's max build height minus one, whichever is lower, and the anchor grid to 80-block spacing capped at
-     * 500 blocks from the centre. Nothing is scheduled or spawned here.
+     * until spawn or a shape call sets it, and there is no ceiling or floor until a shape call sets one. Wall displays default to
+     * a Y of 319 or the world's max build height minus one, whichever is lower. Nothing is scheduled or spawned here.
      */
     public GameBorder(Plugin plugin, World world, double centerX, double centerY, double centerZ) {
         this.plugin = plugin;
@@ -200,8 +197,8 @@ public class GameBorder {
     /**
      * Forces the shader wall on, as if the server delivered the rift-border resource pack. Normally unnecessary: the RiftBorder
      * plugin reports whether the pack is available through {@link WallStyles}, and the border asks it at spawn. With the
-     * shader wall on, {@link #spawn(double)} mounts the display anchor grid and colours it with
-     * {@link BorderTheme#wallColor()}; without it the border renders as particles for everyone. Read at spawn, so on a border
+     * shader wall on, {@link #spawn(double)} gives each viewer a wall display coloured with {@link BorderTheme#wallColor()};
+     * without it the border renders as particles for everyone. Read at spawn, so on a border
      * already active it takes effect only when the border is spawned again. Returns this for chaining.
      */
     public GameBorder withShaderWall() {
@@ -210,27 +207,21 @@ public class GameBorder {
     }
 
     /**
-     * Geometry of the anchor grid the shader wall is mounted on: spacing is the distance in blocks between neighbouring display
-     * entities and maxExtent the hard cap on how far, in blocks, the grid reaches from the construction centre on each axis. The
-     * grid actually spawned reaches the initial radius plus one spacing, capped at maxExtent, so a small arena never pays for a
-     * full-map grid, and each anchor's chunk is kept force-loaded while the border is active. The wall only renders where an
-     * anchor is near enough to track, so a radius past maxExtent silently loses its far side. {@link #spawn(double)} logs a
-     * warning whenever the cap truncates the grid, that is when the initial radius plus one spacing exceeds maxExtent, and only
-     * with the shader wall on, since without it no grid is spawned. Defaults to 80 and 500. Throws IllegalArgumentException when
-     * either value is not positive. Takes effect on the next spawn. Returns this for chaining.
+     * Does nothing. Until 4.1.0 the shader wall hung off a fixed grid of displays around the centre, and this sized that grid.
+     * The wall now sits on one display per viewer, spawned where they stand, so there is no grid, no radius cap and no
+     * force-loaded chunks. Kept so plugins built against earlier versions still compile and run. Returns this for chaining.
+     *
+     * @deprecated no grid exists since 4.1.0; remove the call. Slated for removal in 5.0.0.
      */
+    @Deprecated(since = "4.1.0", forRemoval = true)
     public GameBorder withGrid(int spacing, int maxExtent) {
-        if (spacing <= 0 || maxExtent <= 0) throw new IllegalArgumentException("grid spacing and max extent must be positive");
-        this.gridSpacing = spacing;
-        this.gridMaxExtent = maxExtent;
         return this;
     }
 
     /**
-     * Y the wall anchors sit at. Defaults to 319 or the world's max build height minus one, whichever is lower, so terrain does
-     * not occlude the entities. The shader draws the full cylinder whatever the anchor height, and the nearest-anchor choice is
-     * made on the horizontal plane only. Read whenever an anchor is spawned, so it takes effect on the next spawn and on any
-     * anchor the maintenance task respawns after a change. Returns this for chaining.
+     * Y each viewer's wall display sits at. Defaults to 319 or the world's max build height minus one, whichever is lower, so it
+     * sits in open sky light. The shader draws the full cylinder whatever the display height. Read whenever a display is
+     * spawned, so a change reaches each viewer as their display is next replaced. Returns this for chaining.
      */
     public GameBorder withAnchorY(int y) {
         this.anchorY = y;
@@ -396,19 +387,19 @@ public class GameBorder {
      * Activates the border at initialRadius. The centre returns to the one given at construction and the ceiling and floor to
      * none, so a border spawned again after {@link #remove()} does not keep the last phase's shape. The {@link WallStyles}
      * are then looked up, and the shader wall is on when {@link #withShaderWall()} was called or they report the pack available,
-     * held until removal. When it is on, spawn mounts the anchor grid around the
-     * construction centre, one invisible {@code ItemDisplay} per grid point with its chunk force-loaded, each carrying the pack's
-     * wall model dyed with {@link BorderTheme#wallColor()}, arriving over the following ticks as chunks load, after sweeping
-     * wall entities left behind by a border of this plugin that was never removed, and starts showing each player their nearest
-     * anchor. When it is not, spawn skips the grid entirely, logs one line, and forces {@link WallStyle#PARTICLE} for
-     * everyone without consulting the resolver. The particle renderer starts either way,
+     * held until removal. When it is on, spawn sweeps wall entities left behind by a border of this plugin that was never
+     * removed, then gives every player in the world who sees the shader wall an invisible {@code ItemDisplay} where they stand,
+     * shown to them alone and carrying the pack's wall model dyed with {@link BorderTheme#wallColor()}. Every 10 ticks after
+     * that, a player who has moved more than 32 blocks from their display gets a fresh one where they stand, the old one
+     * leaving a tick later, and players who join the world, switch style or leave are given or lose theirs. When it is off,
+     * spawn creates no displays, logs one line, and forces {@link WallStyle#PARTICLE} for everyone without consulting the
+     * resolver. The particle renderer starts either way,
      * serving players on the particle style every 20 ticks. The damage tracker also always starts, reading the warning subtitle and
      * sound keys from the theme once: from then on every tick classifies each participating survival or adventure player as inside
      * or outside, warns, plays the sounds, every 40 ticks pulses red dust on the ceiling or floor plane around participants
      * inside the radius and within 10 blocks of that plane in any game mode, and deals the configured damage every 20 ticks after
-     * a one-second grace, as described on {@link #setDamagePerSecond(double)}, {@link BorderTheme} and {@link BorderEvents}. With
-     * the shader wall on, logs a warning when initialRadius plus one grid spacing exceeds the grid cap, as described on
-     * {@link #withGrid(int, int)}. Throws IllegalStateException when already active, changing nothing.
+     * a one-second grace, as described on {@link #setDamagePerSecond(double)}, {@link BorderTheme} and {@link BorderEvents}.
+     * Throws IllegalStateException when already active, changing nothing.
      */
     public void spawn(double initialRadius) {
         if (active) throw new IllegalStateException("GameBorder already spawned");
@@ -423,7 +414,7 @@ public class GameBorder {
         this.packConfigured = shaderWall || (wallStyles != null && wallStyles.shaderWallAvailable());
         ACTIVE.add(this);
 
-        // Without the pack the display grid would render nothing - skip it and leave every player on particles.
+        // Without the pack the wall displays would render nothing - skip them and leave every player on particles.
         if (packConfigured) {
             renderer.spawn();
         } else {
@@ -438,8 +429,8 @@ public class GameBorder {
      * Tears the border down: stops an attached {@link BorderPhaseController} first, so its pending wait is cancelled and an
      * in-flight shrink freezes where it is, stops an attached {@link NextBorderIndicator}, which then needs its own
      * {@link NextBorderIndicator#start()} to pulse again, then cancels any transition of its own without firing
-     * {@link #onShrinkComplete(Runnable)}, marks the border inactive, removes the wall entities and releases their force-loaded
-     * chunks, stops the particle wall, and stops the damage tracker, which calls {@link BorderEvents#onWarningCleared(UUID)}
+     * {@link #onShrinkComplete(Runnable)}, marks the border inactive, removes every viewer's wall display, stops the particle
+     * wall, and stops the damage tracker, which calls {@link BorderEvents#onWarningCleared(UUID)}
      * for everyone still outside and stops the long-outside sound for those it had played to, and drops out of
      * {@link #activeBorders()}. The shape is left as it was, and so are both registrations.
      * Safe to call when not active, and the border can be spawned again after.
