@@ -7,12 +7,12 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Color;
 
 /**
- * How a {@link GameBorder} looks and sounds: the wall colours, the warning title and the sounds a player hears outside it. Every
+ * How a {@link GameBorder} looks and sounds: the wall colours, the warning subtitle and the sounds a player hears outside it. Every
  * method has a default, so {@code new BorderTheme() {}} is a complete theme and a host overrides only what it wants to change. A
  * border given none through {@link GameBorder#withTheme(BorderTheme)} uses the defaults. What happens during a border's life,
  * phases starting and players crossing out, is {@link BorderEvents}; one class may implement both.
  * <p>
- * {@link #warningTitle()}, {@link #enterSound()} and {@link #enterLongSound()} are read during {@link GameBorder#spawn(double)}
+ * {@link #warningSubtitle()}, {@link #enterSound()} and {@link #enterLongSound()} are read during {@link GameBorder#spawn(double)}
  * and held until {@link GameBorder#remove()}; a re-spawn reads them again. {@link #wallColor()} and {@link #shrinkColor()} are
  * read every tick of a transition and every 10 ticks otherwise by the shader wall, and on every particle pass while the radius
  * is above 0 by the particle wall, and {@link #indicatorColor()} on every pulse of a running {@link NextBorderIndicator} that
@@ -20,21 +20,20 @@ import org.bukkit.Color;
  */
 public interface BorderTheme {
 
-    /** The title {@link #warningTitle()} shows by default: Border Warning in red small caps. */
-    Component DEFAULT_WARNING_TITLE = Component.text("ʙᴏʀᴅᴇʀ ᴡᴀʀɴɪɴɢ", NamedTextColor.RED);
+    /** The subtitle {@link #warningSubtitle()} shows by default: Border Warning in red small caps. */
+    Component DEFAULT_WARNING_SUBTITLE = Component.text("ʙᴏʀᴅᴇʀ ᴡᴀʀɴɪɴɢ", NamedTextColor.RED);
 
     /** The wall colour {@link #wallColor()} answers by default, the rift-border pack's own aqua, {@code #55FFFF}. */
     Color DEFAULT_WALL_COLOR = Color.fromRGB(0x55, 0xFF, 0xFF);
 
     /**
-     * Title shown to a player while they are outside the border, or null to skip the persistent title entirely. Shown with a
-     * day-long stay the tick a player is first found outside, re-shown once a second while they remain outside, and cleared when
-     * they step back inside, switch to creative or spectator, leave the world, drop out of the participant set, or the border is
-     * removed. It owns the player's title slot meanwhile, so a host that shows titles of its own may prefer null. Defaults to
-     * {@link #DEFAULT_WARNING_TITLE}.
+     * Subtitle flashed to a player the tick they cross out of the border, or null for none. Shown once per crossing for one
+     * second, then it fades out over half a second. It is never re-sent while the player stays outside and never cleared when
+     * they come back, so it simply runs its course. A subtitle only displays alongside a title, so it is sent under an empty
+     * title, which replaces any title on the player's screen at that moment. Defaults to {@link #DEFAULT_WARNING_SUBTITLE}.
      */
-    default Component warningTitle() {
-        return DEFAULT_WARNING_TITLE;
+    default Component warningSubtitle() {
+        return DEFAULT_WARNING_SUBTITLE;
     }
 
     /**

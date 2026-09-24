@@ -18,7 +18,7 @@ message `Nateiwnl` on Discord for the jar.
 - Optional volumetric ceiling and floor (not just a 2D ring)
 - Optional multi-phase controller with pause / resume / sync-to-timer
 - Pluggable choice of where each phase shrinks to
-- Per-player damage with grace period, warning title, and re-entry sound
+- Per-player damage with grace period, a warning subtitle, and re-entry sound
 - A solid shader wall or a particle wall per player, chosen for you by the plugin
 - Particle-ring preview of the next phase's target
 - `BorderTheme` for how it looks and sounds, `BorderEvents` for reacting to what happens
@@ -41,7 +41,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.github.natesoftware:rift-border-api:v3.1.0")
+    compileOnly("com.github.natesoftware:rift-border-api:v4.0.0")
 }
 ```
 
@@ -59,7 +59,7 @@ at all; a bundled copy would be cut off from it and show everyone particles.
 Package `com.natesoftware.riftborder.api`. To build against local changes
 instead, clone this repo beside your plugin, add
 `includeBuild("../rift-border-api")` to `settings.gradle.kts`, and use
-`compileOnly("com.natesoftware:rift-border-api:3.1.0")`.
+`compileOnly("com.natesoftware:rift-border-api:4.0.0")`.
 
 ## Usage
 
@@ -176,7 +176,7 @@ Two optional interfaces, both all-defaults, so implement only what you want to
 change:
 
 - **`BorderTheme`**: how the border looks and sounds. Wall colour, colour while
-  shrinking, warning title, the sounds for crossing out and staying out.
+  shrinking, warning subtitle, the sounds for crossing out and staying out.
 - **`BorderEvents`**: what happens. A phase or shrink starting, a player
   crossing out or coming back. Every event does nothing by default.
 
@@ -201,7 +201,7 @@ One class may implement both. What players get out of the box:
 | | Default |
 | --- | --- |
 | Damage outside the border | 2.0 / s, after a 1 s grace, with the vanilla hurt flash and sound |
-| Warning title | `ʙᴏʀᴅᴇʀ ᴡᴀʀɴɪɴɢ` in red small caps (`DEFAULT_WARNING_TITLE`). It owns the player's title slot while they are outside; return null from `warningTitle()` for none |
+| Warning subtitle | `ʙᴏʀᴅᴇʀ ᴡᴀʀɴɪɴɢ` in red small caps (`DEFAULT_WARNING_SUBTITLE`), flashed once when a player crosses out: one second on screen, then a half-second fade. It is not re-sent while they stay out or cleared when they come back. Return null from `warningSubtitle()` for none |
 | Sound on crossing out | `minecraft:block.note_block.bass` |
 | Sound while still outside | the crossing-out sound again, every 5 s |
 | Wall colour, both wall styles | aqua `#55FFFF` (`wallColor()`) |
@@ -286,6 +286,15 @@ tears everything down on disable. Drop it into a project set up per
 The public types carry Javadoc, also hosted per release at
 `https://javadoc.jitpack.io/com/github/natesoftware/rift-border-api/<tag>/javadoc/`;
 the internals carry `//` notes. CI runs `build` on every push and pull request.
+
+## Upgrading from 3.x
+
+4.0.0 turns the persistent warning title into a brief subtitle.
+
+| 3.x | 4.0.0 |
+| --- | --- |
+| `warningTitle()`, `DEFAULT_WARNING_TITLE` | `warningSubtitle()`, `DEFAULT_WARNING_SUBTITLE` |
+| a title that stays on screen while the player is outside, re-sent every second and cleared when they return | a subtitle shown once per crossing for one second, then a half-second fade, never re-sent or cleared |
 
 ## Upgrading from 2.x
 

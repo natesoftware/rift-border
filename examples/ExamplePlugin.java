@@ -59,7 +59,7 @@ public final class ExamplePlugin extends JavaPlugin {
 
     private static final class Theme implements BorderTheme {
         @Override
-        public Component warningTitle() {
+        public Component warningSubtitle() {
             return Component.text("Get back inside", NamedTextColor.RED);
         }
     }

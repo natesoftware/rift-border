@@ -140,7 +140,7 @@ public class GameBorder {
     }
 
     /**
-     * Restricts damage, warning titles, sounds and the height indicators to players whose UUIDs appear in the set supplier
+     * Restricts damage, warning subtitles, sounds and the height indicators to players whose UUIDs appear in the set supplier
      * returns, queried every tick by the damage tracker and again by {@link BorderPhaseController} when it snapshots participants
      * for a {@link ShrinkTargetSelector}. Without one, or whenever the supplier returns null, every player in the world is a
      * candidate. A player who drops out of the set while outside is cleared as listed on
@@ -277,7 +277,7 @@ public class GameBorder {
     /**
      * Sets the damage dealt to a player who has been outside the border for at least the one-second grace period, applied once
      * every 20 ticks, to absorption first and then to health, with a tick that would reach zero health killing through an
-     * {@code OUTSIDE_BORDER} damage source instead. A value of 0 or less keeps the warning title, the sounds and the tracking but
+     * {@code OUTSIDE_BORDER} damage source instead. A value of 0 or less keeps the warning subtitle, the sounds and the tracking but
      * deals no damage and plays no hurt feedback. Defaults to 2.0. An attached {@link BorderPhaseController} overwrites it with
      * each phase's rate as the phase is entered. Takes effect on the next damage check.
      */
@@ -402,7 +402,7 @@ public class GameBorder {
      * wall entities left behind by a border of this plugin that was never removed, and starts showing each player their nearest
      * anchor. When it is not, spawn skips the grid entirely, logs one line, and forces {@link WallStyle#PARTICLE} for
      * everyone without consulting the resolver. The particle renderer starts either way,
-     * serving players on the particle style every 40 ticks. The damage tracker also always starts, reading the warning title and
+     * serving players on the particle style every 40 ticks. The damage tracker also always starts, reading the warning subtitle and
      * sound keys from the theme once: from then on every tick classifies each participating survival or adventure player as inside
      * or outside, warns, plays the sounds, every 40 ticks pulses red dust on the ceiling or floor plane around participants
      * inside the radius and within 10 blocks of that plane in any game mode, and deals the configured damage every 20 ticks after
@@ -430,7 +430,7 @@ public class GameBorder {
             log.info("[GameBorder] No rift-border pack available - rendering the border as particles for every player");
         }
         particleRenderer.start();
-        // Always tracked: the tracker owns the warning title, the enter sounds and the height indicators, not just damage.
+        // Always tracked: the tracker owns the warning subtitle, the enter sounds and the height indicators, not just damage.
         damageTracker.start();
     }
 
@@ -440,8 +440,8 @@ public class GameBorder {
      * {@link NextBorderIndicator#start()} to pulse again, then cancels any transition of its own without firing
      * {@link #onShrinkComplete(Runnable)}, marks the border inactive, removes the wall entities and releases their force-loaded
      * chunks, stops the particle wall, and stops the damage tracker, which calls {@link BorderEvents#onWarningCleared(UUID)}
-     * for everyone still outside, clears their warning title when one is configured, and stops the long-outside sound for those
-     * it had played to, and drops out of {@link #activeBorders()}. The shape is left as it was, and so are both registrations.
+     * for everyone still outside and stops the long-outside sound for those it had played to, and drops out of
+     * {@link #activeBorders()}. The shape is left as it was, and so are both registrations.
      * Safe to call when not active, and the border can be spawned again after.
      */
     public void remove() {

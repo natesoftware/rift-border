@@ -42,8 +42,9 @@ final class BorderDamageTracker {
     private static final Particle.DustOptions VERTICAL_DUST =
             new Particle.DustOptions(Color.fromRGB(0xFF, 0x40, 0x40), 2.0f);
 
+    // The warning subtitle: straight in, one second on screen, then a half-second fade.
     private static final Title.Times WARNING_TIMES =
-            Title.Times.times(Duration.ZERO, Duration.ofDays(1), Duration.ZERO);
+            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500));
 
     private final GameBorder border;
 
@@ -54,7 +55,7 @@ final class BorderDamageTracker {
     private final Map<UUID, Long> outsideSinceMs = new HashMap<>();
     private final Map<UUID, Long> lastLongPlayedMs = new HashMap<>();
 
-    private Title warningTitle;
+    private Title warning;
     private String enterSound;
     private String enterLongSound;
     private BukkitTask task;
@@ -68,8 +69,8 @@ final class BorderDamageTracker {
     void start() {
         checkCounter = 0;
         indicatorCounter = 0;
-        Component warning = border.theme.warningTitle();
-        warningTitle = warning != null ? Title.title(warning, Component.empty(), WARNING_TIMES) : null;
+        Component subtitle = border.theme.warningSubtitle();
+        warning = subtitle != null ? Title.title(Component.empty(), subtitle, WARNING_TIMES) : null;
         enterSound = border.theme.enterSound();
         enterLongSound = border.theme.enterLongSound();
         task = border.plugin
@@ -87,8 +88,6 @@ final class BorderDamageTracker {
             border.events.onWarningCleared(uuid);
             Player p = border.plugin.getServer().getPlayer(uuid);
             if (p == null || !p.isOnline()) continue;
-            // the warning title has a day-long stay, so a player still outside at teardown keeps it until something clears it
-            if (warningTitle != null) p.clearTitle();
             if (lastLongPlayedMs.containsKey(uuid) && enterLongSound != null) p.stopSound(enterLongSound, SoundCategory.MASTER);
         }
         outsidePlayers.clear();
@@ -158,7 +157,7 @@ final class BorderDamageTracker {
                 if (enterSound != null) {
                     player.playSound(loc, enterSound, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
-                if (warningTitle != null) player.showTitle(warningTitle);
+                if (warning != null) player.showTitle(warning);
             } else {
                 long now = clock.getAsLong();
                 Long enteredAt = outsideSinceMs.get(player.getUniqueId());
@@ -169,9 +168,6 @@ final class BorderDamageTracker {
                 if (dueForLong && enterLongSound != null) {
                     player.playSound(loc, enterLongSound, SoundCategory.MASTER, 0.5f, 1.0f);
                     lastLongPlayedMs.put(player.getUniqueId(), now);
-                }
-                if (shouldDamage && warningTitle != null) {
-                    player.showTitle(warningTitle);
                 }
             }
             if (shouldDamage) {
@@ -193,7 +189,6 @@ final class BorderDamageTracker {
             player.stopSound(enterLongSound, SoundCategory.MASTER);
         }
         border.events.onWarningCleared(player.getUniqueId());
-        if (warningTitle != null) player.clearTitle();
     }
 
     // 3x3 grid of red dust particles spaced 3 blocks apart on the given horizontal plane (ceiling Y or floor Y) around the player.
@@ -215,12 +210,8 @@ final class BorderDamageTracker {
             boolean noLongerParticipant = participantUuids != null && !participantUuids.contains(uuid);
             if (gone || noLongerParticipant) {
                 border.events.onWarningCleared(uuid);
-                if (p != null && p.isOnline()) {
-                    // guarded like the other exit paths - with no warning title configured there is nothing of ours to clear
-                    if (warningTitle != null) p.clearTitle();
-                    if (lastLongPlayedMs.containsKey(uuid) && enterLongSound != null) {
-                        p.stopSound(enterLongSound, SoundCategory.MASTER);
-                    }
+                if (p != null && p.isOnline() && lastLongPlayedMs.containsKey(uuid) && enterLongSound != null) {
+                    p.stopSound(enterLongSound, SoundCategory.MASTER);
                 }
                 outsideSinceMs.remove(uuid);
                 lastLongPlayedMs.remove(uuid);

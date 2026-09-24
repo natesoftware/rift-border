@@ -51,9 +51,9 @@ class BorderThemeTest {
     }
 
     @Test
-    void theDefaultTitleIsBorderWarningInRedSmallCaps() {
-        assertEquals(BorderTheme.DEFAULT_WARNING_TITLE, new BorderTheme() {}.warningTitle());
-        TextComponent title = (TextComponent) BorderTheme.DEFAULT_WARNING_TITLE;
+    void theDefaultSubtitleIsBorderWarningInRedSmallCaps() {
+        assertEquals(BorderTheme.DEFAULT_WARNING_SUBTITLE, new BorderTheme() {}.warningSubtitle());
+        TextComponent title = (TextComponent) BorderTheme.DEFAULT_WARNING_SUBTITLE;
         assertEquals("\u0299\u1d0f\u0280\u1d05\u1d07\u0280 \u1d21\u1d00\u0280\u0274\u026a\u0274\u0262", title.content());
         assertEquals(NamedTextColor.RED, title.color());
     }

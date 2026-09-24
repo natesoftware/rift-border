@@ -33,15 +33,14 @@ public interface BorderEvents {
 
     /**
      * Called the first tick a participating survival or adventure player is found outside the border, whether beyond the radius,
-     * above the ceiling or below the floor. Fires before the enter sound and warning title, once per excursion.
+     * above the ceiling or below the floor. Fires before the enter sound and warning subtitle, once per excursion.
      */
     default void onWarningShown(UUID player) {}
 
     /**
      * Called when a player who was outside stops being tracked: they step back inside, switch to creative or spectator, leave the
      * world or server, drop out of the participant set, or the border is removed while they are still outside. For a player still
-     * online the long-outside sound is stopped alongside it if it has played, and the title is cleared when a warning title is
-     * configured, every path skipping the clear when none is.
+     * online the long-outside sound is stopped alongside it if it has played. The warning subtitle is left to fade on its own.
      */
     default void onWarningCleared(UUID player) {}
 
